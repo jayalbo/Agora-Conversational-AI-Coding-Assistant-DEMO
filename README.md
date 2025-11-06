@@ -4,6 +4,10 @@ A powerful Next.js application featuring real-time voice interaction with an AI 
 
 Built for **LA Tech Week** by [ConvoAI](https://convoai.world) × [Agora](https://www.agora.io)
 
+> **🌐 PUBLIC LIVE DEMO**
+> 
+> This is designed as a **public live demo** where visitors enter their own API credentials through the UI. Credentials are stored only in the browser's localStorage and **never sent to or stored on your backend servers**. Each user brings their own Agora, OpenAI, and Azure credentials.
+
 ## ✨ Features
 
 - 🎤 **Voice Interaction**: Natural voice conversations with AI using Agora RTC
@@ -39,60 +43,63 @@ Here's a beautiful button 【<!DOCTYPE html><html>...</html>】 that you can int
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### For Users (Visiting the Live Demo)
+
+1. **Visit the deployed site**
+2. **Click the "Settings" button** in the top-right corner
+3. **Enter your own API credentials:**
+   - Agora credentials (App ID, Certificate, Customer ID/Secret, Bot UID)
+   - OpenAI API key (for LLM)
+   - Azure TTS API key and region (for text-to-speech)
+4. **Click "Save Credentials"** - they're stored locally in your browser
+5. **Click "Start Session"** and start talking!
+
+> 🔒 **Privacy**: Your credentials are stored only in your browser's localStorage and sent directly to the respective APIs (Agora, OpenAI, Azure). They are **never** sent to or stored on the demo's backend servers.
+
+### For Developers (Deploying Your Own)
+
+#### 1. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Configure Environment Variables
-
-Create a `.env.local` file in the root directory:
-
-```env
-# Agora App Credentials
-NEXT_PUBLIC_AGORA_APP_ID=your_agora_app_id
-AGORA_APP_CERTIFICATE=your_app_certificate
-
-# Agora RESTful API Credentials (for Conversational AI agent)
-AGORA_API_KEY=your_api_key
-AGORA_API_SECRET=your_api_secret
-
-# Bot Configuration
-NEXT_PUBLIC_AGORA_BOT_UID=1001
-
-# LLM Configuration (OpenAI GPT-4o)
-LLM_URL=https://api.openai.com/v1/chat/completions
-LLM_API_KEY=your_openai_api_key
-
-# TTS Configuration (Microsoft Azure)
-TTS_API_KEY=your_azure_tts_api_key
-TTS_REGION=eastus
-```
-
-**Where to get these values:**
-
-1. **Agora Credentials**: Sign up at [Agora Console](https://console.agora.io/)
-
-   - Create a project → Get App ID and App Certificate
-   - Enable Conversational AI → Get API Key & Secret
-
-2. **OpenAI API Key**: Get from [OpenAI Platform](https://platform.openai.com/api-keys)
-
-   - Uses GPT-4o model for best code generation
-
-3. **Azure TTS**: Create resource at [Azure Portal](https://portal.azure.com)
-   - Uses `en-US-AndrewMultilingualNeural` voice
-
-📚 **See `ENV_SETUP.md` for detailed setup instructions**
-
-### 3. Run the Development Server
+#### 2. Build and Deploy
 
 ```bash
-npm run dev
+npm run build
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Or deploy to Vercel, Netlify, or any Next.js-compatible platform.
+
+#### 3. (Optional) Set Default/Fallback Credentials
+
+If you want to provide fallback credentials for development or testing, create a `.env.local` file:
+
+```bash
+cp .env.example .env.local
+```
+
+Then fill in the values. These will be used as fallbacks when users haven't configured their own credentials yet.
+
+**Note:** For a public live demo, you typically **don't** need environment variables - users provide their own credentials through the UI!
+
+### Where Users Get Their Credentials
+
+When visitors use your live demo, they need to obtain their own credentials from:
+
+**1. Agora Credentials** → [console.agora.io](https://console.agora.io/)
+  - App ID & Certificate (from Project Settings)
+  - Customer ID & Secret (from RESTful API section)
+  - Bot UID (any unique number, e.g., 1001)
+
+**2. OpenAI API Key** → [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+  - Requires GPT-4o access
+
+**3. Azure TTS** → [portal.azure.com](https://portal.azure.com)
+  - Create Speech Services resource
+  - Get API key and region
 
 ## 🏗️ Architecture
 
@@ -213,13 +220,23 @@ Agora client wrapper featuring:
 - **Timestamp**: Each message shows when it was sent
 - **Speaker Labels**: Clear "You" vs "AI" distinction
 
-## 🔒 Security
+## 🔒 Security & Privacy
 
-- **Sandboxed Iframe**: Code runs isolated with `sandbox="allow-scripts"`
-- **Server-side Tokens**: App Certificate never exposed to client
-- **Environment Variables**: All credentials stored securely
+- **Client-side Only**: User credentials are stored in browser localStorage only
+- **No Backend Storage**: Credentials are **never** sent to or stored on your servers
+- **Direct API Calls**: The backend acts as a pass-through proxy, forwarding credentials directly to Agora/OpenAI/Azure APIs
+- **Sandboxed Iframe**: Generated code runs isolated with `sandbox="allow-scripts"`
 - **No DOM Access**: Generated code can't access parent page
 - **Content Security**: XSS prevention through iframe isolation
+- **User Control**: Users can clear their credentials anytime by clearing browser data
+
+### How It Works
+
+1. User enters credentials in Settings modal
+2. Credentials saved to `localStorage` in browser
+3. When starting a session, credentials are sent from browser → your API routes → respective APIs (Agora/OpenAI/Azure)
+4. Your backend **never stores** these credentials - they're only used to forward API requests
+5. All sessions are ephemeral and don't persist user data
 
 ## 🧪 Development Tips
 
@@ -259,9 +276,19 @@ The AI will use https://picsum.photos/ for all images automatically!
 
 ## 🐛 Troubleshooting
 
-### "Missing Agora credentials" error
+### "Please configure your credentials in Settings first"
 
-✅ Check that `.env.local` exists with all required variables
+✅ Click the "Settings" button in the top-right corner
+✅ Fill in ALL required fields in the settings modal
+✅ Make sure there are no empty values
+✅ Click "Save Credentials"
+
+### "Missing Agora credentials" or "Missing LLM/TTS credentials"
+
+✅ Open Settings and verify all credentials are entered correctly
+✅ Check that your Agora App ID and Certificate match your project
+✅ Verify your OpenAI API key is valid and has GPT-4o access
+✅ Ensure your Azure TTS region matches where you created the resource
 
 ### Microphone not working
 
@@ -339,25 +366,42 @@ The mic button:
 
 ## 🚢 Deployment
 
-### Environment Variables
+### Quick Deploy to Vercel
 
-Make sure to set all environment variables in your deployment platform:
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/your-repo)
+
+```bash
+npm run build
+vercel deploy
+```
+
+### Other Platforms
+
+**Netlify / Cloudflare Pages / AWS Amplify:**
+
+Build command: `npm run build`  
+Output directory: `.next`
+
+### Environment Variables (Optional)
+
+For a public live demo, you typically **don't need** environment variables since users provide their own credentials through the UI.
+
+However, if you want to provide fallback/default credentials for development or testing:
 
 - Vercel: Project Settings → Environment Variables
 - Netlify: Site Settings → Build & Deploy → Environment
 - AWS/GCP: Use secrets manager
 
-### Build Command
+Then add the variables from `.env.example` (see ENV_SETUP.md for details).
 
-```bash
-npm run build
-```
+### Post-Deployment
 
-### Start Command
+After deploying:
 
-```bash
-npm start
-```
+1. Visit your deployed URL
+2. Click "Settings" to configure your own credentials
+3. Test the demo by starting a session
+4. Share the URL with others - they'll each need to configure their own credentials
 
 ## 📝 License
 

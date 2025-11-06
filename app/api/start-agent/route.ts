@@ -19,16 +19,31 @@ import { RtcTokenBuilder, RtcRole } from "agora-token";
  */
 export async function POST(request: NextRequest) {
   try {
-    const { channelName, uid } = await request.json();
+    const { 
+      channelName, 
+      uid,
+      // User-provided credentials (for live demo)
+      appId: userAppId,
+      appCertificate: userAppCertificate,
+      customerId: userCustomerId,
+      customerSecret: userCustomerSecret,
+      botUid: userBotUid,
+      llmUrl: userLlmUrl,
+      llmApiKey: userLlmApiKey,
+      ttsApiKey: userTtsApiKey,
+      ttsRegion: userTtsRegion,
+    } = await request.json();
 
-    const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
-    const appCertificate = process.env.AGORA_APP_CERTIFICATE;
-    const customerId = process.env.AGORA_CUSTOMER_ID;
-    const customerSecret = process.env.AGORA_CUSTOMER_SECRET;
-    const botUid = process.env.NEXT_PUBLIC_AGORA_BOT_UID;
-    const llmUrl = process.env.LLM_URL;
-    const llmApiKey = process.env.LLM_API_KEY;
-    const ttsApiKey = process.env.TTS_API_KEY;
+    // Use credentials from request body (for live demo) or fall back to env vars (for development)
+    const appId = userAppId || process.env.NEXT_PUBLIC_AGORA_APP_ID;
+    const appCertificate = userAppCertificate || process.env.AGORA_APP_CERTIFICATE;
+    const customerId = userCustomerId || process.env.AGORA_CUSTOMER_ID;
+    const customerSecret = userCustomerSecret || process.env.AGORA_CUSTOMER_SECRET;
+    const botUid = userBotUid || process.env.NEXT_PUBLIC_AGORA_BOT_UID;
+    const llmUrl = userLlmUrl || process.env.LLM_URL;
+    const llmApiKey = userLlmApiKey || process.env.LLM_API_KEY;
+    const ttsApiKey = userTtsApiKey || process.env.TTS_API_KEY;
+    const ttsRegion = userTtsRegion || process.env.TTS_REGION || "westus";
 
     if (
       !appId ||
@@ -38,15 +53,15 @@ export async function POST(request: NextRequest) {
       !botUid
     ) {
       return NextResponse.json(
-        { error: "Missing Agora RESTful API credentials" },
-        { status: 500 }
+        { error: "Missing Agora credentials. Please configure your credentials in Settings." },
+        { status: 400 }
       );
     }
 
     if (!llmUrl || !llmApiKey || !ttsApiKey) {
       return NextResponse.json(
-        { error: "Missing LLM or TTS credentials" },
-        { status: 500 }
+        { error: "Missing LLM or TTS credentials. Please configure your credentials in Settings." },
+        { status: 400 }
       );
     }
 
@@ -130,7 +145,7 @@ export async function POST(request: NextRequest) {
           vendor: "microsoft",
           params: {
             key: ttsApiKey,
-            region: "westus",
+            region: ttsRegion,
             voice_name: "en-US-AndrewMultilingualNeural", // Natural-sounding male voice
           },
           // CRITICAL: skip_patterns: [2] tells TTS to skip Chinese square brackets 【】

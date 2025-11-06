@@ -3,15 +3,16 @@ import { RtcTokenBuilder, RtcRole } from "agora-token";
 
 export async function POST(request: NextRequest) {
   try {
-    const { channelName, uid } = await request.json();
+    const { channelName, uid, appId, appCertificate } = await request.json();
 
-    const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
-    const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+    // Use credentials from request body (for live demo) or fall back to env vars (for development)
+    const agoraAppId = appId || process.env.NEXT_PUBLIC_AGORA_APP_ID;
+    const agoraAppCertificate = appCertificate || process.env.AGORA_APP_CERTIFICATE;
 
-    if (!appId || !appCertificate) {
+    if (!agoraAppId || !agoraAppCertificate) {
       return NextResponse.json(
-        { error: "Missing Agora credentials" },
-        { status: 500 }
+        { error: "Missing Agora credentials. Please configure your credentials in Settings." },
+        { status: 400 }
       );
     }
 
@@ -27,8 +28,8 @@ export async function POST(request: NextRequest) {
 
     // Generate a single token with both RTC and RTM2 privileges
     const token = RtcTokenBuilder.buildTokenWithRtm2(
-      appId,
-      appCertificate,
+      agoraAppId,
+      agoraAppCertificate,
       channelName,
       uid || 0, // RTC account (numeric UID)
       role,
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     );
 
     console.log("\n=== TOKEN GENERATED ===");
-    console.log("App ID:", appId);
+    console.log("App ID:", agoraAppId);
     console.log("Channel:", channelName);
     console.log("UID:", uid || 0);
     console.log("UID as string:", String(uid || 0));

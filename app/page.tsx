@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgoraConversationalClient as AgoraClientType } from "@/lib/agora-client";
 import JSZip from "jszip";
-import { Mic, MicOff, LogOut } from "lucide-react";
+import { Mic, MicOff, LogOut, Settings } from "lucide-react";
+import SettingsModal, { type UserCredentials } from "./components/SettingsModal";
 
 interface TranscriptMessage {
   id: string;
@@ -71,10 +72,34 @@ export default function Home() {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [credentials, setCredentials] = useState<UserCredentials | null>(null);
+  const [credentialsConfigured, setCredentialsConfigured] = useState(false);
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
+
+  // Load credentials from localStorage on mount
+  useEffect(() => {
+    const savedCredentials = localStorage.getItem("agoraCredentials");
+    if (savedCredentials) {
+      try {
+        const parsed = JSON.parse(savedCredentials);
+        setCredentials(parsed);
+        setCredentialsConfigured(true);
+      } catch (err) {
+        console.error("Failed to parse saved credentials:", err);
+      }
+    }
+  }, []);
+
+  // Save credentials handler
+  const handleSaveCredentials = (newCredentials: UserCredentials) => {
+    setCredentials(newCredentials);
+    setCredentialsConfigured(true);
+    localStorage.setItem("agoraCredentials", JSON.stringify(newCredentials));
+  };
 
   useEffect(() => {
     // Scroll the transcript container to bottom, not the whole page
@@ -188,6 +213,13 @@ export default function Home() {
    * Previous session's code remains visible until this fires.
    */
   const handleConnect = async () => {
+    // Check if credentials are configured
+    if (!credentials || !credentialsConfigured) {
+      setError("Please configure your credentials in Settings first.");
+      setShowSettings(true);
+      return;
+    }
+
     setIsConnecting(true);
     setError("");
 
@@ -199,13 +231,8 @@ export default function Home() {
     setShowSourceCode(false);
 
     try {
-      const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
-      const staticToken = process.env.NEXT_PUBLIC_AGORA_TOKEN;
-      const botUid = process.env.NEXT_PUBLIC_AGORA_BOT_UID;
-
-      if (!appId || !botUid) {
-        throw new Error("Missing Agora credentials in environment variables");
-      }
+      const appId = credentials.agoraAppId;
+      const botUid = credentials.agoraBotUid;
 
       // Generate random channel name to ensure session isolation
       // Format: "agora-ai-" + random alphanumeric string
@@ -213,40 +240,51 @@ export default function Home() {
       const uid = Math.floor(Math.random() * 1000000);
       const botUidNum = parseInt(botUid, 10);
 
-      // Get or generate token (single token with both RTC and RTM2 privileges)
-      // Using buildTokenWithRtm2() gives us audio streaming + messaging in one token
-      let token: string;
+      // Generate token with user credentials
+      const tokenResponse = await fetch("/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          channelName: channel, 
+          uid,
+          appId: credentials.agoraAppId,
+          appCertificate: credentials.agoraAppCertificate,
+        }),
+      });
 
-      if (staticToken) {
-        token = staticToken;
-      } else {
-        const response = await fetch("/api/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channelName: channel, uid }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to generate token");
-        }
-
-        const data = await response.json();
-        token = data.token;
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.json();
+        throw new Error(errorData.error || "Failed to generate token");
       }
 
-      // Start the conversational AI agent
+      const tokenData = await tokenResponse.json();
+      const token = tokenData.token;
+
+      // Start the conversational AI agent with user credentials
       console.log("Starting agent for channel:", channel);
       const agentResponse = await fetch("/api/start-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channelName: channel, uid }),
+        body: JSON.stringify({ 
+          channelName: channel, 
+          uid,
+          appId: credentials.agoraAppId,
+          appCertificate: credentials.agoraAppCertificate,
+          customerId: credentials.agoraCustomerId,
+          customerSecret: credentials.agoraCustomerSecret,
+          botUid: credentials.agoraBotUid,
+          llmUrl: credentials.llmUrl,
+          llmApiKey: credentials.llmApiKey,
+          ttsApiKey: credentials.ttsApiKey,
+          ttsRegion: credentials.ttsRegion,
+        }),
       });
 
       if (!agentResponse.ok) {
         const errorData = await agentResponse.json();
         console.error("Agent start failed:", errorData);
         throw new Error(
-          `Failed to start conversational AI agent: ${errorData.error}`
+          errorData.error || "Failed to start conversational AI agent"
         );
       }
 
@@ -519,7 +557,7 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <img
-                src="https://convoai.world/ConvoAI-World-logo-horizontal.png"
+                src="/convoai-logo.png"
                 alt="ConvoAI"
                 className="h-5 sm:h-6 md:h-7"
               />
@@ -572,26 +610,41 @@ export default function Home() {
                   Real-time voice interaction with live code preview
                 </p>
               </div>
-              {!isConnected ? (
+              <div className="flex items-center gap-2">
+                {!credentialsConfigured && (
+                  <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 px-3 py-1 rounded-lg text-xs flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>Configure credentials first</span>
+                  </div>
+                )}
                 <button
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                  className="px-4 sm:px-5 md:px-6 py-2 sm:py-3 rounded-lg font-semibold transition whitespace-nowrap text-sm sm:text-base text-black hover:brightness-110 w-full sm:w-auto disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(270deg, #00c2ff, #a0faff 33%, #fcf9f8 66%, #c46ffb)",
-                  }}
+                  onClick={() => setShowSettings(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600 rounded-lg transition-all text-sm"
+                  title="Settings"
                 >
-                  {isConnecting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
-                      <span>Connecting...</span>
-                    </>
-                  ) : (
-                    "Start Session"
-                  )}
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">Settings</span>
                 </button>
-              ) : (
+                {!isConnected ? (
+                  <button
+                    onClick={handleConnect}
+                    disabled={isConnecting || !credentialsConfigured}
+                    className="px-4 sm:px-5 md:px-6 py-2 sm:py-3 rounded-lg font-semibold transition whitespace-nowrap text-sm sm:text-base text-black hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(270deg, #00c2ff, #a0faff 33%, #fcf9f8 66%, #c46ffb)",
+                    }}
+                  >
+                    {isConnecting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                        <span>Connecting...</span>
+                      </>
+                    ) : (
+                      "Start Session"
+                    )}
+                  </button>
+                ) : (
                 <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
                   <button
                     onClick={handleToggleMute}
@@ -622,9 +675,18 @@ export default function Home() {
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </header>
+
+        {/* Settings Modal */}
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onSave={handleSaveCredentials}
+          initialCredentials={credentials || undefined}
+        />
 
         {error && (
           <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-4">
