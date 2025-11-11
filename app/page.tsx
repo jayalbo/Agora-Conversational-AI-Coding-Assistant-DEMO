@@ -454,13 +454,18 @@ export default function Home() {
   const handleDisconnect = async () => {
     // First, leave the conversational AI agent if we have an agentId
     // This tells Agora's servers to stop the agent and release resources
-    if (agentId) {
+    if (agentId && credentials) {
       try {
         console.log("Leaving conversational AI agent:", agentId);
         await fetch("/api/leave-agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId }),
+          body: JSON.stringify({ 
+            agentId,
+            appId: credentials.agoraAppId,
+            customerId: credentials.agoraCustomerId,
+            customerSecret: credentials.agoraCustomerSecret,
+          }),
         });
         console.log("Successfully left conversational AI agent");
       } catch (error) {

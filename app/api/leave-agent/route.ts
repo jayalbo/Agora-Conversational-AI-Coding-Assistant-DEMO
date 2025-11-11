@@ -3,7 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { agentId } = body;
+    const { 
+      agentId,
+      // User-provided credentials (for live demo)
+      appId: userAppId,
+      customerId: userCustomerId,
+      customerSecret: userCustomerSecret,
+    } = body;
 
     if (!agentId) {
       return NextResponse.json(
@@ -12,14 +18,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
-    const apiKey = process.env.AGORA_API_KEY;
-    const apiSecret = process.env.AGORA_API_SECRET;
+    // Use credentials from request body (for live demo) or fall back to env vars (for development)
+    const appId = userAppId || process.env.NEXT_PUBLIC_AGORA_APP_ID;
+    const customerId = userCustomerId || process.env.AGORA_CUSTOMER_ID;
+    const customerSecret = userCustomerSecret || process.env.AGORA_CUSTOMER_SECRET;
 
-    if (!appId || !apiKey || !apiSecret) {
+    if (!appId || !customerId || !customerSecret) {
       return NextResponse.json(
-        { error: "Missing Agora credentials" },
-        { status: 500 }
+        { error: "Missing Agora credentials. Please configure your credentials in Settings." },
+        { status: 400 }
       );
     }
 
@@ -36,7 +43,7 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Basic ${Buffer.from(
-            `${apiKey}:${apiSecret}`
+            `${customerId}:${customerSecret}`
           ).toString("base64")}`,
         },
       }
