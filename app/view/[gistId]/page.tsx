@@ -140,7 +140,6 @@ export default function ViewSharedCode() {
               code={code} 
               language="html"
               theme="github-dark"
-              showLineNumbers={true}
             />
           ) : (
             <iframe

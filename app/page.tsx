@@ -935,7 +935,6 @@ export default function Home() {
                         code={currentCode}
                         language="html"
                         theme="github-dark"
-                        showLineNumbers={true}
                       />
                     </div>
                   ) : (
