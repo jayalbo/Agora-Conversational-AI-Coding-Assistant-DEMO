@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgoraConversationalClient as AgoraClientType } from "@/lib/agora-client";
 import JSZip from "jszip";
-import { Mic, MicOff, LogOut, Settings } from "lucide-react";
+import { Mic, MicOff, LogOut, Settings, Share2, ExternalLink, Download } from "lucide-react";
 import SettingsModal, { type UserCredentials } from "./components/SettingsModal";
+import CodeHighlight from "./components/CodeHighlight";
 
 interface TranscriptMessage {
   id: string;
@@ -75,6 +76,9 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [credentials, setCredentials] = useState<UserCredentials | null>(null);
   const [credentialsConfigured, setCredentialsConfigured] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -513,6 +517,52 @@ export default function Home() {
     }
   };
 
+  const handleShare = async () => {
+    if (!currentCode) return;
+
+    setIsSharing(true);
+    setShareError(null);
+
+    try {
+      // Create paste via our backend proxy (avoids CORS)
+      const response = await fetch("/api/share", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ code: currentCode }),
+      });
+
+      console.log("Share API response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Share API error:", errorData);
+        throw new Error(errorData.error || "Failed to create share link");
+      }
+
+      const data = await response.json();
+      console.log("Paste created successfully:", data.id);
+      
+      const shareableUrl = data.url;
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(shareableUrl);
+      setShareUrl(shareableUrl);
+    } catch (err) {
+      console.error("Share error:", err);
+      setShareError(err instanceof Error ? err.message : "Failed to create share link");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleCopyShareUrl = async () => {
+    if (shareUrl) {
+      await navigator.clipboard.writeText(shareUrl);
+    }
+  };
+
   const handleMicToggle = async () => {
     if (!agoraClientRef.current) return;
 
@@ -688,6 +738,70 @@ export default function Home() {
           initialCredentials={credentials || undefined}
         />
 
+        {/* Share Success Modal */}
+        {shareUrl && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 relative">
+              <button
+                onClick={() => setShareUrl(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+              
+              <div className="text-center mb-4">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-3xl">✅</span>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Link Copied!</h3>
+                <p className="text-slate-400 text-sm">
+                  Share this link with anyone to view your generated code
+                </p>
+              </div>
+
+              <div className="bg-slate-900 rounded-lg p-3 mb-4 break-all text-sm text-slate-300 font-mono">
+                {shareUrl}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCopyShareUrl}
+                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+                >
+                  <span>📋</span>
+                  Copy Again
+                </button>
+                <button
+                  onClick={() => window.open(`https://dpaste.org/${shareUrl.split('/').pop()}`, '_blank')}
+                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View on dpaste
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Share Error Toast */}
+        {shareError && (
+          <div className="fixed bottom-4 right-4 bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded-lg shadow-xl z-50 max-w-md">
+            <div className="flex items-start gap-2">
+              <span className="text-xl">⚠️</span>
+              <div>
+                <p className="font-semibold">Failed to create share link</p>
+                <p className="text-sm text-red-200">{shareError}</p>
+              </div>
+              <button
+                onClick={() => setShareError(null)}
+                className="ml-auto text-red-200 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-4">
             {error}
@@ -766,8 +880,28 @@ export default function Home() {
                         URL.revokeObjectURL(url);
                       }}
                       className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2"
+                      title="Download code"
                     >
-                      <span>⬇</span>
+                      <Download className="w-4 h-4" />
+                      <span className="hidden sm:inline">Download</span>
+                    </button>
+                    <button
+                      onClick={handleShare}
+                      disabled={isSharing}
+                      className="bg-purple-600 hover:bg-purple-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2 disabled:opacity-50"
+                      title="Share code"
+                    >
+                      {isSharing ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                          <span className="hidden sm:inline">Sharing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Share</span>
+                        </>
+                      )}
                     </button>
                   </>
                 )}
@@ -783,7 +917,7 @@ export default function Home() {
                     <div className="w-full h-full relative">
                       <button
                         onClick={handleCopyCode}
-                        className="absolute top-2 right-2 z-10 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5"
+                        className="absolute top-4 right-4 z-50 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-lg"
                       >
                         {copied ? (
                           <>
@@ -797,9 +931,12 @@ export default function Home() {
                           </>
                         )}
                       </button>
-                      <pre className="w-full h-full overflow-auto bg-slate-900 text-green-400 p-4 text-xs font-mono">
-                        <code>{formatHTML(currentCode)}</code>
-                      </pre>
+                      <CodeHighlight 
+                        code={currentCode}
+                        language="html"
+                        theme="github-dark"
+                        showLineNumbers={true}
+                      />
                     </div>
                   ) : (
                     <iframe
