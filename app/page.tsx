@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgoraConversationalClient as AgoraClientType } from "@/lib/agora-client";
 import JSZip from "jszip";
-import { Mic, MicOff, LogOut, Settings, Share2, ExternalLink, Download } from "lucide-react";
+import { Mic, MicOff, LogOut, Settings, Share2, Download } from "lucide-react";
 import SettingsModal, { type UserCredentials } from "./components/SettingsModal";
 import CodeHighlight from "./components/CodeHighlight";
 
@@ -79,6 +79,7 @@ export default function Home() {
   const [isSharing, setIsSharing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -96,6 +97,7 @@ export default function Home() {
         console.error("Failed to parse saved credentials:", err);
       }
     }
+
   }, []);
 
   // Save credentials handler
@@ -565,6 +567,8 @@ export default function Home() {
   const handleCopyShareUrl = async () => {
     if (shareUrl) {
       await navigator.clipboard.writeText(shareUrl);
+      setShareUrlCopied(true);
+      setTimeout(() => setShareUrlCopied(false), 2000);
     }
   };
 
@@ -764,25 +768,25 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="bg-slate-900 rounded-lg p-3 mb-4 break-all text-sm text-slate-300 font-mono">
-                {shareUrl}
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCopyShareUrl}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition flex items-center justify-center gap-2"
-                >
+              <div className="mb-4 relative">
+                <p className="text-xs text-slate-400 mb-1.5 flex items-center gap-1">
                   <span>📋</span>
-                  Copy Again
-                </button>
-                <button
-                  onClick={() => window.open(`https://dpaste.org/${shareUrl.split('/').pop()}`, '_blank')}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition flex items-center justify-center gap-2"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View on dpaste
-                </button>
+                  Click URL to copy:
+                </p>
+                <div className="relative">
+                  <div 
+                    onClick={handleCopyShareUrl}
+                    className="bg-slate-900 rounded-lg p-3 break-all text-sm text-slate-300 font-mono cursor-pointer hover:bg-slate-800 transition-colors border border-slate-700 hover:border-slate-600"
+                    title="Click to copy to clipboard"
+                  >
+                    {shareUrl}
+                  </div>
+                  {shareUrlCopied && (
+                    <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap z-10 opacity-100 transition-opacity duration-300">
+                      ✓ Copied!
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

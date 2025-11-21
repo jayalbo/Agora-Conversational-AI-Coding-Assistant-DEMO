@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * API Route: Fetch Paste Content from dpaste.org
+ * API Route: Fetch Paste Content from paste.fyi
  * 
  * This is a simple proxy to avoid CORS issues when fetching pastes.
- * No data is stored - we just forward the request to dpaste.org.
+ * No data is stored - we just forward the request to paste.fyi.
  */
 export async function GET(
   request: NextRequest,
@@ -22,16 +22,16 @@ export async function GET(
       );
     }
 
-    // Fetch from dpaste raw URL (correct format: /raw/)
-    const dpastUrl = `https://dpaste.org/${id}/raw/`;
-    console.log("Fetching from:", dpastUrl);
+    // Fetch from paste.fyi (returns content directly)
+    const pasteUrl = `https://paste.fyi/${id}`;
+    console.log("Fetching from:", pasteUrl);
     
-    const response = await fetch(dpastUrl);
-    console.log("dpaste response status:", response.status);
+    const response = await fetch(pasteUrl);
+    console.log("paste.fyi response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("dpaste error response:", errorText);
+      console.error("paste.fyi error response:", errorText);
       
       if (response.status === 404) {
         return NextResponse.json(

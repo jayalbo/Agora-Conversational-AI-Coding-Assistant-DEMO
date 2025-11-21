@@ -40,7 +40,7 @@ TTS_REGION=westus
 # NEXT_PUBLIC_AGORA_TOKEN=your_rtc_token
 ```
 
-**🔴 DO NOT leave any values empty!** Every variable above (except the commented optional one) must have a valid value.
+**🔴 DO NOT leave any values empty!** Every variable above (except the commented optional ones) must have a valid value.
 
 ## Required Variables
 

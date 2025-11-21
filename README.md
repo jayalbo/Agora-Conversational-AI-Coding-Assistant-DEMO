@@ -17,6 +17,7 @@ Built for **LA Tech Week** by [ConvoAI](https://convoai.world) × [Agora](https:
 - 📝 **Live Transcript**: See the full conversation history with timestamps
 - 🔇 **Mic Control**: Mute/unmute microphone with visual feedback
 - 📦 **Code Download**: Export generated code as a .zip file
+- 🔗 **Share Code**: Create shareable links via dpaste.org (365-day expiry)
 - 🎨 **Modern UI**: Beautiful gradient design with responsive layout
 - 🚀 **Smart Loading**: Context-aware "Generating code..." indicator
 - 🌐 **Auto Images**: Uses Picsum Photos for all image generation
@@ -121,7 +122,13 @@ la_tech_week/
 │   ├── api/
 │   │   ├── token/route.ts          # Dynamic RTC token generation
 │   │   ├── start-agent/route.ts    # Start Conversational AI agent
-│   │   └── leave-agent/route.ts    # Clean up agent on disconnect
+│   │   ├── leave-agent/route.ts    # Clean up agent on disconnect
+│   │   ├── share/route.ts          # Create shareable dpaste.org links
+│   │   └── paste/[id]/route.ts     # Fetch shared code content
+│   ├── components/
+│   │   ├── SettingsModal.tsx       # User credentials input modal
+│   │   └── CodeHighlight.tsx       # Shiki-powered code viewer
+│   ├── view/[gistId]/page.tsx      # Shared code viewer page
 │   ├── page.tsx                    # Main UI component
 │   ├── layout.tsx                  # Root layout with metadata
 │   └── globals.css                 # Global styles
