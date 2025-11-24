@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Eye, Code, Download } from "lucide-react";
+import { ArrowLeft, Eye, Code, Download, Copy, Check } from "lucide-react";
 import CodeHighlight from "@/app/components/CodeHighlight";
 
 export default function ViewSharedCode() {
@@ -14,6 +14,7 @@ export default function ViewSharedCode() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const fetchPaste = async () => {
@@ -55,6 +56,16 @@ export default function ViewSharedCode() {
     a.download = `shared-code-${gistId}.html`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy code:", err);
+    }
   };
 
   if (loading) {
@@ -106,6 +117,23 @@ export default function ViewSharedCode() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={handleCopyCode}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm font-semibold"
+              title="Copy code to clipboard"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span className="hidden sm:inline">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  <span className="hidden sm:inline">Copy Code</span>
+                </>
+              )}
+            </button>
+            <button
               onClick={() => setShowSource(!showSource)}
               className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition text-sm"
             >
@@ -134,13 +162,31 @@ export default function ViewSharedCode() {
 
       {/* Code Preview */}
       <div className="container mx-auto px-4 py-6">
-        <div className="bg-slate-800/50 backdrop-blur rounded-lg shadow-xl overflow-hidden" style={{ height: "calc(100vh - 140px)" }}>
+        <div className="bg-slate-800/50 backdrop-blur rounded-lg shadow-xl overflow-hidden relative" style={{ height: "calc(100vh - 140px)" }}>
           {showSource ? (
-            <CodeHighlight 
-              code={code} 
-              language="html"
-              theme="github-dark"
-            />
+            <div className="w-full h-full relative">
+              <button
+                onClick={handleCopyCode}
+                className="absolute top-4 right-4 z-50 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-lg"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+              <CodeHighlight 
+                code={code} 
+                language="html"
+                theme="github-dark"
+              />
+            </div>
           ) : (
             <iframe
               srcDoc={code}
