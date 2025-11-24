@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgoraConversationalClient as AgoraClientType } from "@/lib/agora-client";
 import JSZip from "jszip";
-import { Mic, MicOff, LogOut, Settings, Share2, Download } from "lucide-react";
+import { Mic, MicOff, LogOut, Settings, Share2, Download, Upload, Link as LinkIcon } from "lucide-react";
 import SettingsModal, { type UserCredentials } from "./components/SettingsModal";
 import CodeHighlight from "./components/CodeHighlight";
 
@@ -80,6 +80,13 @@ export default function Home() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
+  const [showLoadImportModal, setShowLoadImportModal] = useState(false);
+  const [loadImportTab, setLoadImportTab] = useState<"load" | "import">("import");
+  const [loadUrl, setLoadUrl] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -366,16 +373,24 @@ export default function Home() {
 
         // Only show FINAL spoken text in transcript (no code, no interim messages)
         // This prevents the transcript from flickering with partial responses
+        // Also filter out system messages about code imports/loads
         if (spokenText && message.isFinal) {
-          setTranscript((prev) => [
-            ...prev,
-            {
-              id: `${Date.now()}-${Math.random()}`,
-              type: message.type,
-              text: spokenText, // Only the spoken part, no code blocks
-              timestamp: new Date(),
-            },
-          ]);
+          // Filter out code notification messages (they start with "Current code context")
+          const isCodeNotification = spokenText.includes("Current code context") || 
+                                   spokenText.includes("I've imported new code") ||
+                                   spokenText.includes("I've loaded new code");
+          
+          if (!isCodeNotification) {
+            setTranscript((prev) => [
+              ...prev,
+              {
+                id: `${Date.now()}-${Math.random()}`,
+                type: message.type,
+                text: spokenText, // Only the spoken part, no code blocks
+                timestamp: new Date(),
+              },
+            ]);
+          }
         }
 
         // Auto-render code blocks in preview pane (only on final message)
@@ -570,6 +585,156 @@ export default function Home() {
       setShareUrlCopied(true);
       setTimeout(() => setShareUrlCopied(false), 2000);
     }
+  };
+
+  // Helper function to notify the AI agent about code changes
+  // Only called when agent is connected (button is disabled otherwise)
+  const notifyAgentAboutCode = async (code: string, source: "imported" | "loaded") => {
+    if (!isConnected || !credentials || !agentId) {
+      console.log("Skipping agent notification - agent not ready");
+      return;
+    }
+
+    try {
+      // Create a message informing the agent about the code
+      // Using a system message format that won't appear in transcript
+      const message = `Current code context:\n\n${code}\n\nPlease be aware of this code when responding.`;
+      
+      await fetch("/api/agent/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          agentUid: credentials.agoraBotUid, // Bot's RTM UID (string)
+          appId: credentials.agoraAppId,
+          customerId: credentials.agoraCustomerId,
+          customerSecret: credentials.agoraCustomerSecret,
+        }),
+      });
+      
+      console.log(`Agent notified about ${source} code`);
+    } catch (err) {
+      console.error("Failed to notify agent about code:", err);
+      // Don't throw - this is a nice-to-have feature
+    }
+  };
+
+  const handleLoadFromUrl = async () => {
+    if (!loadUrl.trim()) {
+      setLoadError("Please enter a URL");
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      // Extract paste ID from URL (supports paste.fyi URLs and our view URLs)
+      let pasteId = '';
+      const url = loadUrl.trim();
+      
+      // Check if it's a paste.fyi URL
+      if (url.includes('paste.fyi/')) {
+        pasteId = url.split('paste.fyi/')[1]?.split('/')[0]?.split('?')[0] || '';
+      } 
+      // Check if it's our view URL
+      else if (url.includes('/view/')) {
+        pasteId = url.split('/view/')[1]?.split('/')[0]?.split('?')[0] || '';
+      }
+      // Assume it's just an ID
+      else {
+        pasteId = url.split('/').pop()?.split('?')[0] || url;
+      }
+
+      if (!pasteId) {
+        throw new Error("Could not extract paste ID from URL");
+      }
+
+      // Fetch the paste content
+      const response = await fetch(`/api/paste/${pasteId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to load code from URL");
+      }
+
+      const data = await response.json();
+      
+      if (!data.content || data.content.trim() === '') {
+        throw new Error("No code found in this URL");
+      }
+
+      // Set the loaded code
+      setCurrentCode(data.content);
+      
+      // Add to code blocks history
+      setCodeBlocks(prev => [...prev, {
+        id: `loaded-${Date.now()}`,
+        html: data.content,
+        timestamp: new Date()
+      }]);
+
+      // Notify the AI agent about the loaded code
+      await notifyAgentAboutCode(data.content, "loaded");
+
+      // Close modal and reset
+      setShowLoadImportModal(false);
+      setLoadUrl("");
+    } catch (err) {
+      console.error("Load error:", err);
+      setLoadError(err instanceof Error ? err.message : "Failed to load code");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleImportCode = async () => {
+    if (!importText.trim()) {
+      setImportError("Please enter or paste code");
+      return;
+    }
+
+    try {
+      const code = importText.trim();
+      
+      // Set the imported code
+      setCurrentCode(code);
+      
+      // Add to code blocks history
+      setCodeBlocks(prev => [...prev, {
+        id: `imported-${Date.now()}`,
+        html: code,
+        timestamp: new Date()
+      }]);
+
+      // Notify the AI agent about the imported code
+      await notifyAgentAboutCode(code, "imported");
+
+      // Close modal and reset
+      setShowLoadImportModal(false);
+      setImportText("");
+      setImportError(null);
+    } catch (err) {
+      console.error("Import error:", err);
+      setImportError(err instanceof Error ? err.message : "Failed to import code");
+    }
+  };
+
+  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (content) {
+        setImportText(content);
+      }
+    };
+    reader.onerror = () => {
+      setImportError("Failed to read file");
+    };
+    reader.readAsText(file);
   };
 
   const handleMicToggle = async () => {
@@ -792,6 +957,163 @@ export default function Home() {
           </div>
         )}
 
+        {/* Load/Import Code Modal */}
+        {showLoadImportModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full p-6 relative max-h-[90vh] flex flex-col">
+              <button
+                onClick={() => {
+                  setShowLoadImportModal(false);
+                  setLoadUrl("");
+                  setLoadError(null);
+                  setImportText("");
+                  setImportError(null);
+                }}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white z-10"
+              >
+                ✕
+              </button>
+              
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-white mb-4">Import or Load Code</h3>
+                
+                {/* Tabs */}
+                <div className="flex gap-2 mb-4 border-b border-slate-700">
+                  <button
+                    onClick={() => setLoadImportTab("import")}
+                    className={`px-4 py-2 font-semibold transition ${
+                      loadImportTab === "import"
+                        ? "text-cyan-400 border-b-2 border-cyan-400"
+                        : "text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    Import
+                  </button>
+                  <button
+                    onClick={() => setLoadImportTab("load")}
+                    className={`px-4 py-2 font-semibold transition ${
+                      loadImportTab === "load"
+                        ? "text-blue-400 border-b-2 border-blue-400"
+                        : "text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    Load from URL
+                  </button>
+                </div>
+
+                {/* Import Tab */}
+                {loadImportTab === "import" && (
+                  <div>
+                    <p className="text-slate-400 text-sm mb-4">
+                      Paste your code below or upload a file
+                    </p>
+                    
+                    <div className="mb-3">
+                      <label className="block text-sm text-slate-300 mb-2">
+                        Upload File (HTML, TXT, etc.)
+                      </label>
+                      <input
+                        type="file"
+                        accept=".html,.htm,.txt,.js,.css"
+                        onChange={handleFileImport}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                      />
+                    </div>
+                    
+                    <textarea
+                      value={importText}
+                      onChange={(e) => setImportText(e.target.value)}
+                      placeholder="Paste your code here..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm h-64 resize-none"
+                    />
+                    
+                    {importError && (
+                      <p className="text-red-400 text-sm mt-2">{importError}</p>
+                    )}
+                    
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={handleImportCode}
+                        disabled={!importText.trim()}
+                        className="flex-1 bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Import</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowLoadImportModal(false);
+                          setImportText("");
+                          setImportError(null);
+                        }}
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Load from URL Tab */}
+                {loadImportTab === "load" && (
+                  <div>
+                    <p className="text-slate-400 text-sm mb-4">
+                      Enter a share URL (paste.fyi or your share link) to load existing code
+                    </p>
+                    
+                    <input
+                      type="text"
+                      value={loadUrl}
+                      onChange={(e) => setLoadUrl(e.target.value)}
+                      placeholder="https://paste.fyi/XXXXX or https://yoursite.com/view/XXXXX"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleLoadFromUrl();
+                        }
+                      }}
+                    />
+                    
+                    {loadError && (
+                      <p className="text-red-400 text-sm mb-2">{loadError}</p>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleLoadFromUrl}
+                        disabled={isLoading}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isLoading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            <span>Loading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <LinkIcon className="w-4 h-4" />
+                            <span>Load</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowLoadImportModal(false);
+                          setLoadUrl("");
+                          setLoadError(null);
+                        }}
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Share Error Toast */}
         {shareError && (
           <div className="fixed bottom-4 right-4 bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded-lg shadow-xl z-50 max-w-md">
@@ -851,6 +1173,18 @@ export default function Home() {
                     </select>
                   </div>
                 )}
+                <button
+                  onClick={() => {
+                    setShowLoadImportModal(true);
+                    setLoadImportTab("import");
+                  }}
+                  disabled={!isConnected}
+                  className="bg-cyan-600 hover:bg-cyan-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={isConnected ? "Import or load code" : "Start session first to import code"}
+                >
+                  <Upload className="w-4 h-4" />
+                  <span className="hidden sm:inline">Import</span>
+                </button>
                 {currentCode && (
                   <>
                     <button
