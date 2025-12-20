@@ -3,14 +3,14 @@ import { RtcTokenBuilder, RtcRole } from "agora-token";
 
 /**
  * API Route: Start Conversational AI Agent
- * 
+ *
  * This endpoint initializes an Agora Conversational AI agent that:
  * 1. Joins the specified RTC channel
  * 2. Listens to user's voice (ASR: Speech-to-text)
  * 3. Processes requests through LLM (GPT-4o)
  * 4. Responds with natural voice (TTS: Text-to-speech via Azure)
  * 5. Sends transcriptions via RTM for the UI
- * 
+ *
  * The agent configuration includes:
  * - System prompt instructing AI to wrap code in Chinese brackets 【】
  * - TTS skip_patterns to avoid reading code aloud
@@ -19,8 +19,8 @@ import { RtcTokenBuilder, RtcRole } from "agora-token";
  */
 export async function POST(request: NextRequest) {
   try {
-    const { 
-      channelName, 
+    const {
+      channelName,
       uid,
       // User-provided credentials (for live demo)
       appId: userAppId,
@@ -28,17 +28,21 @@ export async function POST(request: NextRequest) {
       customerId: userCustomerId,
       customerSecret: userCustomerSecret,
       botUid: userBotUid,
+      llmProvider: userLlmProvider,
       llmUrl: userLlmUrl,
       llmApiKey: userLlmApiKey,
+      llmModel: userLlmModel,
       ttsApiKey: userTtsApiKey,
       ttsRegion: userTtsRegion,
     } = await request.json();
 
     // Use credentials from request body (for live demo) or fall back to env vars (for development)
     const appId = userAppId || process.env.NEXT_PUBLIC_AGORA_APP_ID;
-    const appCertificate = userAppCertificate || process.env.AGORA_APP_CERTIFICATE;
+    const appCertificate =
+      userAppCertificate || process.env.AGORA_APP_CERTIFICATE;
     const customerId = userCustomerId || process.env.AGORA_CUSTOMER_ID;
-    const customerSecret = userCustomerSecret || process.env.AGORA_CUSTOMER_SECRET;
+    const customerSecret =
+      userCustomerSecret || process.env.AGORA_CUSTOMER_SECRET;
     const botUid = userBotUid || process.env.NEXT_PUBLIC_AGORA_BOT_UID;
     const llmUrl = userLlmUrl || process.env.LLM_URL;
     const llmApiKey = userLlmApiKey || process.env.LLM_API_KEY;
@@ -53,14 +57,20 @@ export async function POST(request: NextRequest) {
       !botUid
     ) {
       return NextResponse.json(
-        { error: "Missing Agora credentials. Please configure your credentials in Settings." },
+        {
+          error:
+            "Missing Agora credentials. Please configure your credentials in Settings.",
+        },
         { status: 400 }
       );
     }
 
     if (!llmUrl || !llmApiKey || !ttsApiKey) {
       return NextResponse.json(
-        { error: "Missing LLM or TTS credentials. Please configure your credentials in Settings." },
+        {
+          error:
+            "Missing LLM or TTS credentials. Please configure your credentials in Settings.",
+        },
         { status: 400 }
       );
     }
@@ -153,25 +163,62 @@ export async function POST(request: NextRequest) {
           // Pattern codes: 0=none, 1=square brackets[], 2=Chinese brackets【】, 3=angle brackets<>
           skip_patterns: [2],
         },
-        llm: {
-          url: llmUrl,
-          api_key: llmApiKey,
-          system_messages: [
-            {
-              role: "system",
-              content:
-                "You are an expert web development AI assistant. Keep spoken responses SHORT and concise.\n\nIMPORTANT: When you generate HTML/CSS/JS code, you MUST wrap it in CHINESE SQUARE BRACKETS like this:\n【<!DOCTYPE html><html>...</html>】\n\nThe Chinese square brackets 【】 are REQUIRED - they tell the system to render the code visually instead of speaking it.\n\nRULES:\n1. Code must be wrapped in Chinese square brackets: 【<!DOCTYPE html><html>...</html>】\n2. Put ONLY the raw HTML code inside 【】 - NO markdown code fences like ```html, NO explanatory text\n3. Start with <!DOCTYPE html> or <html immediately after the opening 【\n4. Text outside 【】 will be spoken aloud - KEEP IT BRIEF\n5. Make code self-contained with inline CSS in <style> tags and JS in <script> tags\n6. Code runs in an iframe - ensure it's responsive and standalone\n7. Use modern, clean design with good UX practices\n8. For images, use https://picsum.photos/ - Examples: https://picsum.photos/200/300 or https://picsum.photos/400 for square or https://picsum.photos/id/237/200/300 for specific image\n\nSPEAKING STYLE: Be concise. Say only what's necessary. Avoid long explanations.\n\nCORRECT EXAMPLE:\nHere's a button 【<!DOCTYPE html><html><head><style>button{background:red;color:white;padding:20px;border:none;}</style></head><body><button onclick=\"alert('Hi!')\">Click Me</button></body></html>】 that shows an alert.\n\nWRONG EXAMPLE (with markdown fences):\n【```html\n<!DOCTYPE html>...\n```】\n\nALWAYS use raw HTML inside the brackets, never markdown fences. Without Chinese brackets 【】, the code will be spoken instead of rendered.",
-            },
-          ],
-          max_history: 32,
-          greeting_message:
-            "Hi! I'm your Agora AI coding assistant. Ask me to create any web app and I'll build it for you!",
-          failure_message:
-            "I'm having trouble processing that. Could you please try again?",
-          params: {
-            model: "gpt-4o",
-          },
-        },
+        llm: (() => {
+          const systemPrompt =
+            "You are an expert web development AI assistant. Keep spoken responses SHORT and concise.\n\nIMPORTANT: When you generate HTML/CSS/JS code, you MUST wrap it in CHINESE SQUARE BRACKETS like this:\n【<!DOCTYPE html><html>...</html>】\n\nThe Chinese square brackets 【】 are REQUIRED - they tell the system to render the code visually instead of speaking it.\n\nRULES:\n1. Code must be wrapped in Chinese square brackets: 【<!DOCTYPE html><html>...</html>】\n2. Put ONLY the raw HTML code inside 【】 - NO markdown code fences like ```html, NO explanatory text\n3. Start with <!DOCTYPE html> or <html immediately after the opening 【\n4. Text outside 【】 will be spoken aloud - KEEP IT BRIEF\n5. Make code self-contained with inline CSS in <style> tags and JS in <script> tags\n6. Code runs in an iframe - ensure it's responsive and standalone\n7. Use modern, clean design with good UX practices\n8. For images, use https://picsum.photos/ - Examples: https://picsum.photos/200/300 or https://picsum.photos/400 for square or https://picsum.photos/id/237/200/300 for specific image\n\nSPEAKING STYLE: Be concise. Say only what's necessary. Avoid long explanations.\n\nCORRECT EXAMPLE:\nHere's a button 【<!DOCTYPE html><html><head><style>button{background:red;color:white;padding:20px;border:none;}</style></head><body><button onclick=\"alert('Hi!')\">Click Me</button></body></html>】 that shows an alert.\n\nWRONG EXAMPLE (with markdown fences):\n【```html\n<!DOCTYPE html>...\n```】\n\nALWAYS use raw HTML inside the brackets, never markdown fences. Without Chinese brackets 【】, the code will be spoken instead of rendered.";
+
+          // Gemini uses different format per Agora docs: https://docs.agora.io/en/conversational-ai/models/llm/gemini
+          if (userLlmProvider === "gemini") {
+            // For Gemini: API key goes in URL, system_messages use parts array, need style: "gemini"
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${
+              userLlmModel || "gemini-2.0-flash"
+            }:streamGenerateContent?alt=sse&key=${llmApiKey}`;
+
+            return {
+              url: geminiUrl,
+              system_messages: [
+                {
+                  parts: [
+                    {
+                      text: systemPrompt,
+                    },
+                  ],
+                  role: "user",
+                },
+              ],
+              max_history: 32,
+              greeting_message:
+                "Hi! I'm your Agora AI coding assistant. Ask me to create any web app and I'll build it for you!",
+              failure_message:
+                "I'm having trouble processing that. Could you please try again?",
+              params: {
+                model: userLlmModel || "gemini-2.0-flash",
+              },
+              style: "gemini",
+            };
+          } else {
+            // OpenAI format (default)
+            return {
+              url: llmUrl,
+              api_key: llmApiKey,
+              system_messages: [
+                {
+                  role: "system",
+                  content: systemPrompt,
+                },
+              ],
+              max_history: 32,
+              greeting_message:
+                "Hi! I'm your Agora AI coding assistant. Ask me to create any web app and I'll build it for you!",
+              failure_message:
+                "I'm having trouble processing that. Could you please try again?",
+              params: {
+                model: userLlmModel || "gpt-5-mini-2025-08-07",
+                max_completion_tokens: 16384, // High value for longer code generation
+              },
+            };
+          }
+        })(),
         vad: {
           mode: "interrupt",
           interrupt_duration_ms: 160,

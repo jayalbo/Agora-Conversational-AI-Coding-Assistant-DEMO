@@ -3,14 +3,18 @@
 import { useState, useEffect } from "react";
 import { X, Save, Settings, Eye, EyeOff } from "lucide-react";
 
+export type LLMProvider = "openai" | "gemini";
+
 export interface UserCredentials {
   agoraAppId: string;
   agoraAppCertificate: string;
   agoraCustomerId: string;
   agoraCustomerSecret: string;
   agoraBotUid: string;
+  llmProvider: LLMProvider;
   llmUrl: string;
   llmApiKey: string;
+  llmModel: string;
   ttsApiKey: string;
   ttsRegion: string;
 }
@@ -28,10 +32,34 @@ const defaultCredentials: UserCredentials = {
   agoraCustomerId: "",
   agoraCustomerSecret: "",
   agoraBotUid: "1001",
+  llmProvider: "openai",
   llmUrl: "https://api.openai.com/v1/chat/completions",
   llmApiKey: "",
+  llmModel: "gpt-4o",
   ttsApiKey: "",
   ttsRegion: "westus",
+};
+
+// Provider-specific configurations
+const LLM_PROVIDERS = {
+  openai: {
+    name: "OpenAI",
+    url: "https://api.openai.com/v1/chat/completions",
+    apiKeyPlaceholder: "sk-proj-...",
+    apiKeyLink: "https://platform.openai.com/api-keys",
+    apiKeyLinkText: "OpenAI Platform",
+    defaultModel: "gpt-4o",
+  },
+  gemini: {
+    name: "Google Gemini",
+    // Gemini URL format: API key goes in query parameter
+    // The actual URL will be constructed in the API route with the API key
+    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key={api_key}",
+    apiKeyPlaceholder: "AIza...",
+    apiKeyLink: "https://ai.google.dev/",
+    apiKeyLinkText: "Google AI Studio",
+    defaultModel: "gemini-2.0-flash",
+  },
 };
 
 export default function SettingsModal({
@@ -48,7 +76,13 @@ export default function SettingsModal({
 
   useEffect(() => {
     if (initialCredentials) {
-      setCredentials(initialCredentials);
+      // Migrate old credentials that don't have llmProvider or llmModel
+      const migratedCredentials = {
+        ...initialCredentials,
+        llmProvider: initialCredentials.llmProvider || "openai" as LLMProvider,
+        llmModel: initialCredentials.llmModel || (initialCredentials.llmProvider === "gemini" ? "gemini-2.0-flash" : "gpt-4o"),
+      };
+      setCredentials(migratedCredentials);
     }
   }, [initialCredentials]);
 
@@ -99,7 +133,26 @@ export default function SettingsModal({
   };
 
   const handleChange = (field: keyof UserCredentials, value: string) => {
-    setCredentials((prev) => ({ ...prev, [field]: value }));
+    setCredentials((prev) => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-update LLM URL and model when provider changes
+      if (field === "llmProvider" && (value === "openai" || value === "gemini")) {
+        const provider = LLM_PROVIDERS[value as LLMProvider];
+        updated.llmModel = provider.defaultModel;
+        // For OpenAI, use the direct URL
+        // For Gemini, URL will be constructed in the API route with API key
+        updated.llmUrl = provider.url;
+      }
+      
+      // For Gemini, update URL template when model changes (but API key will be added in route)
+      if (field === "llmModel" && updated.llmProvider === "gemini") {
+        // URL template - API key will be added in the API route
+        updated.llmUrl = `https://generativelanguage.googleapis.com/v1beta/models/${value}:streamGenerateContent?alt=sse&key={api_key}`;
+      }
+      
+      return updated;
+    });
     // Clear error for this field when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -203,32 +256,72 @@ export default function SettingsModal({
             <h3 className="text-lg font-semibold text-green-300 flex items-center gap-2">
               <span>🤖</span> LLM Configuration
             </h3>
+            
+            {/* Provider Selection */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                LLM Provider
+              </label>
+              <select
+                value={credentials.llmProvider}
+                onChange={(e) => handleChange("llmProvider", e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500 transition-colors"
+              >
+                <option value="openai">OpenAI (GPT-4o)</option>
+                <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
+              </select>
+            </div>
+
             <p className="text-sm text-slate-400">
               Get API key from{" "}
               <a
-                href="https://platform.openai.com/api-keys"
+                href={LLM_PROVIDERS[credentials.llmProvider].apiKeyLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:underline"
               >
-                OpenAI Platform
+                {LLM_PROVIDERS[credentials.llmProvider].apiKeyLinkText}
               </a>
             </p>
 
+            {/* Model Selection */}
             <InputField
-              label="LLM URL"
-              value={credentials.llmUrl}
-              onChange={(value) => handleChange("llmUrl", value)}
-              error={errors.llmUrl}
-              placeholder="https://api.openai.com/v1/chat/completions"
+              label="Model"
+              value={credentials.llmModel}
+              onChange={(value) => handleChange("llmModel", value)}
+              error={errors.llmModel}
+              placeholder={
+                credentials.llmProvider === "gemini"
+                  ? "gemini-2.0-flash"
+                  : "gpt-4o"
+              }
             />
+
+            {credentials.llmProvider === "openai" && (
+              <InputField
+                label="LLM URL"
+                value={credentials.llmUrl}
+                onChange={(value) => handleChange("llmUrl", value)}
+                error={errors.llmUrl}
+                placeholder={LLM_PROVIDERS[credentials.llmProvider].url}
+              />
+            )}
+
+            {credentials.llmProvider === "gemini" && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm text-blue-200">
+                <p>
+                  <strong>Note:</strong> For Gemini, the API key will be automatically added to the URL.
+                  URL format: <code className="bg-slate-800 px-1 rounded text-xs">https://generativelanguage.googleapis.com/v1beta/models/{credentials.llmModel}:streamGenerateContent?alt=sse&key=YOUR_API_KEY</code>
+                </p>
+              </div>
+            )}
 
             <SecretInputField
               label="API Key"
               value={credentials.llmApiKey}
               onChange={(value) => handleChange("llmApiKey", value)}
               error={errors.llmApiKey}
-              placeholder="sk-proj-..."
+              placeholder={LLM_PROVIDERS[credentials.llmProvider].apiKeyPlaceholder}
               show={showSecrets.llmApiKey}
               onToggle={() => toggleSecretVisibility("llmApiKey")}
             />

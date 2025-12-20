@@ -98,6 +98,13 @@ export default function Home() {
     if (savedCredentials) {
       try {
         const parsed = JSON.parse(savedCredentials);
+        // Migrate old credentials that don't have llmProvider or llmModel
+        if (!parsed.llmProvider) {
+          parsed.llmProvider = "openai";
+        }
+        if (!parsed.llmModel) {
+          parsed.llmModel = parsed.llmProvider === "gemini" ? "gemini-2.0-flash" : "gpt-4o";
+        }
         setCredentials(parsed);
         setCredentialsConfigured(true);
       } catch (err) {
@@ -286,8 +293,10 @@ export default function Home() {
           customerId: credentials.agoraCustomerId,
           customerSecret: credentials.agoraCustomerSecret,
           botUid: credentials.agoraBotUid,
+          llmProvider: credentials.llmProvider,
           llmUrl: credentials.llmUrl,
           llmApiKey: credentials.llmApiKey,
+          llmModel: credentials.llmModel,
           ttsApiKey: credentials.ttsApiKey,
           ttsRegion: credentials.ttsRegion,
         }),
