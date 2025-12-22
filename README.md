@@ -5,7 +5,7 @@ A powerful Next.js application featuring real-time voice interaction with an AI 
 Built for **LA Tech Week** by [ConvoAI](https://convoai.world) × [Agora](https://www.agora.io)
 
 > **🌐 PUBLIC LIVE DEMO**
-> 
+>
 > This is designed as a **public live demo** where visitors enter their own API credentials through the UI. Credentials are stored only in the browser's localStorage and **never sent to or stored on your backend servers**. Each user brings their own Agora, OpenAI, and Azure credentials.
 
 ## ✨ Features
@@ -19,7 +19,6 @@ Built for **LA Tech Week** by [ConvoAI](https://convoai.world) × [Agora](https:
 - 📦 **Code Download**: Export generated code as a .zip file
 - 🔗 **Share Code**: Create shareable links via dpaste.org (365-day expiry)
 - 🎨 **Modern UI**: Beautiful gradient design with responsive layout
-- 🚀 **Smart Loading**: Context-aware "Generating code..." indicator
 - 🌐 **Auto Images**: Uses Picsum Photos for all image generation
 
 ## 🎬 How It Works
@@ -91,16 +90,19 @@ Then fill in the values. These will be used as fallbacks when users haven't conf
 When visitors use your live demo, they need to obtain their own credentials from:
 
 **1. Agora Credentials** → [console.agora.io](https://console.agora.io/)
-  - App ID & Certificate (from Project Settings)
-  - Customer ID & Secret (from RESTful API section)
-  - Bot UID (any unique number, e.g., 1001)
+
+- App ID & Certificate (from Project Settings)
+- Customer ID & Secret (from RESTful API section)
+- Bot UID (any unique number, e.g., 1001)
 
 **2. OpenAI API Key** → [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-  - Requires GPT-4o access
+
+- Requires GPT-4o access
 
 **3. Azure TTS** → [portal.azure.com](https://portal.azure.com)
-  - Create Speech Services resource
-  - Get API key and region
+
+- Create Speech Services resource
+- Get API key and region
 
 ## 🏗️ Architecture
 
