@@ -1,10 +1,25 @@
 "use client";
 
+// Force dynamic rendering to prevent SSR issues with browser APIs
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect, useRef } from "react";
 import type { AgoraConversationalClient as AgoraClientType } from "@/lib/agora-client";
 import JSZip from "jszip";
-import { Mic, MicOff, LogOut, Settings, Share2, Download, Upload, Link as LinkIcon } from "lucide-react";
-import SettingsModal, { type UserCredentials } from "./components/SettingsModal";
+import {
+  Mic,
+  MicOff,
+  LogOut,
+  Settings,
+  Share2,
+  Download,
+  Upload,
+  Link as LinkIcon,
+  Send,
+} from "lucide-react";
+import SettingsModal, {
+  type UserCredentials,
+} from "./components/SettingsModal";
 import CodeHighlight from "./components/CodeHighlight";
 
 interface TranscriptMessage {
@@ -81,12 +96,21 @@ export default function Home() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [showLoadImportModal, setShowLoadImportModal] = useState(false);
-  const [loadImportTab, setLoadImportTab] = useState<"load" | "import">("import");
+  const [loadImportTab, setLoadImportTab] = useState<"load" | "import">(
+    "import"
+  );
   const [loadUrl, setLoadUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+  const [microphoneDevices, setMicrophoneDevices] = useState<MediaDeviceInfo[]>(
+    []
+  );
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState<string>("");
+  const [showDeviceSelector, setShowDeviceSelector] = useState(false);
+  const [chatMessage, setChatMessage] = useState<string>("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -103,7 +127,10 @@ export default function Home() {
           parsed.llmProvider = "openai";
         }
         if (!parsed.llmModel) {
-          parsed.llmModel = parsed.llmProvider === "gemini" ? "gemini-2.0-flash" : "gpt-4o";
+          parsed.llmModel =
+            parsed.llmProvider === "gemini"
+              ? "gemini-3-flash-preview"
+              : "gpt-4o-mini";
         }
         setCredentials(parsed);
         setCredentialsConfigured(true);
@@ -112,7 +139,49 @@ export default function Home() {
       }
     }
 
+    // Only run in browser
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    // Load saved microphone device preference
+    const savedDeviceId = localStorage.getItem("selectedMicrophoneId");
+    if (savedDeviceId) {
+      setSelectedMicrophoneId(savedDeviceId);
+    }
+
+    // Enumerate microphone devices
+    loadMicrophoneDevices();
   }, []);
+
+  // Load available microphone devices
+  const loadMicrophoneDevices = async () => {
+    // Only run in browser
+    if (typeof window === "undefined" || !navigator.mediaDevices) {
+      return;
+    }
+
+    try {
+      // Dynamically import to avoid SSR issues
+      const { AgoraConversationalClient } = await import("@/lib/agora-client");
+
+      // Request permission first
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const devices = await AgoraConversationalClient.getMicrophoneDevices();
+      setMicrophoneDevices(devices);
+
+      // If no device is selected and devices are available, select the first one
+      const savedDeviceId = localStorage.getItem("selectedMicrophoneId");
+      if (!savedDeviceId && devices.length > 0) {
+        const firstDeviceId = devices[0].deviceId;
+        setSelectedMicrophoneId(firstDeviceId);
+        localStorage.setItem("selectedMicrophoneId", firstDeviceId);
+      }
+    } catch (error) {
+      console.error("Failed to load microphone devices:", error);
+    }
+  };
 
   // Save credentials handler
   const handleSaveCredentials = (newCredentials: UserCredentials) => {
@@ -264,8 +333,8 @@ export default function Home() {
       const tokenResponse = await fetch("/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          channelName: channel, 
+        body: JSON.stringify({
+          channelName: channel,
           uid,
           appId: credentials.agoraAppId,
           appCertificate: credentials.agoraAppCertificate,
@@ -279,42 +348,6 @@ export default function Home() {
 
       const tokenData = await tokenResponse.json();
       const token = tokenData.token;
-
-      // Start the conversational AI agent with user credentials
-      console.log("Starting agent for channel:", channel);
-      const agentResponse = await fetch("/api/start-agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          channelName: channel, 
-          uid,
-          appId: credentials.agoraAppId,
-          appCertificate: credentials.agoraAppCertificate,
-          customerId: credentials.agoraCustomerId,
-          customerSecret: credentials.agoraCustomerSecret,
-          botUid: credentials.agoraBotUid,
-          llmProvider: credentials.llmProvider,
-          llmUrl: credentials.llmUrl,
-          llmApiKey: credentials.llmApiKey,
-          llmModel: credentials.llmModel,
-          ttsApiKey: credentials.ttsApiKey,
-          ttsRegion: credentials.ttsRegion,
-        }),
-      });
-
-      if (!agentResponse.ok) {
-        const errorData = await agentResponse.json();
-        console.error("Agent start failed:", errorData);
-        throw new Error(
-          errorData.error || "Failed to start conversational AI agent"
-        );
-      }
-
-      const agentData = await agentResponse.json();
-      console.log("Agent started successfully:", agentData);
-
-      // Store the agent ID for later cleanup
-      setAgentId(agentData.agentId);
 
       // Dynamically import Agora client (client-side only)
       const AgoraModule = await import("@/lib/agora-client");
@@ -385,10 +418,11 @@ export default function Home() {
         // Also filter out system messages about code imports/loads
         if (spokenText && message.isFinal) {
           // Filter out code notification messages (they start with "Current code context")
-          const isCodeNotification = spokenText.includes("Current code context") || 
-                                   spokenText.includes("I've imported new code") ||
-                                   spokenText.includes("I've loaded new code");
-          
+          const isCodeNotification =
+            spokenText.includes("Current code context") ||
+            spokenText.includes("I've imported new code") ||
+            spokenText.includes("I've loaded new code");
+
           if (!isCodeNotification) {
             setTranscript((prev) => [
               ...prev,
@@ -421,40 +455,61 @@ export default function Home() {
         }
       });
 
-      await client.initialize();
+      // Simple flow: Create mic track -> Join -> Publish -> Start agent
+
+      // Step 1: Create microphone track
+      const deviceId = selectedMicrophoneId || undefined;
+      await client.createMicrophoneTrack(deviceId);
+      setIsMicActive(true);
+
+      // Step 2: Join the channel
+      await client.joinChannel();
+
+      // Step 3: Initialize RTM for transcriptions
+      await client.initializeRTM();
+
+      // Step 4: Publish microphone track
+      await client.publishMicrophone();
 
       agoraClientRef.current = client;
       setIsConnected(true);
       setError("");
 
-      setTranscript((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          type: "agent",
-          text: `Connected to channel: ${channel}. AI agent started. Activating microphone...`,
-          timestamp: new Date(),
-        },
-      ]);
+      // Step 5: Now start the conversational AI agent
+      console.log("Starting agent for channel:", channel);
+      const agentResponse = await fetch("/api/start-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelName: channel,
+          uid,
+          appId: credentials.agoraAppId,
+          appCertificate: credentials.agoraAppCertificate,
+          customerId: credentials.agoraCustomerId,
+          customerSecret: credentials.agoraCustomerSecret,
+          botUid: credentials.agoraBotUid,
+          llmProvider: credentials.llmProvider,
+          llmUrl: credentials.llmUrl,
+          llmApiKey: credentials.llmApiKey,
+          llmModel: credentials.llmModel,
+          ttsApiKey: credentials.ttsApiKey,
+          ttsRegion: credentials.ttsRegion,
+        }),
+      });
 
-      // Auto-start microphone after connecting
-      setTimeout(async () => {
-        try {
-          await client.startMicrophone();
-          setIsMicActive(true);
-          setTranscript((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              type: "user",
-              text: "[Microphone active - Start talking!]",
-              timestamp: new Date(),
-            },
-          ]);
-        } catch (err) {
-          console.error("Failed to auto-start microphone:", err);
-        }
-      }, 500);
+      if (!agentResponse.ok) {
+        const errorData = await agentResponse.json();
+        console.error("Agent start failed:", errorData);
+        throw new Error(
+          errorData.error || "Failed to start conversational AI agent"
+        );
+      }
+
+      const agentData = await agentResponse.json();
+      console.log("Agent started successfully:", agentData);
+
+      // Store the agent ID for later cleanup
+      setAgentId(agentData.agentId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       console.error("Connection error:", err);
@@ -486,7 +541,7 @@ export default function Home() {
         await fetch("/api/leave-agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             agentId,
             appId: credentials.agoraAppId,
             customerId: credentials.agoraCustomerId,
@@ -558,7 +613,7 @@ export default function Home() {
       // Create paste via our backend proxy (avoids CORS)
       const response = await fetch("/api/share", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ code: currentCode }),
@@ -574,15 +629,17 @@ export default function Home() {
 
       const data = await response.json();
       console.log("Paste created successfully:", data.id);
-      
+
       const shareableUrl = data.url;
-      
+
       // Copy to clipboard
       await navigator.clipboard.writeText(shareableUrl);
       setShareUrl(shareableUrl);
     } catch (err) {
       console.error("Share error:", err);
-      setShareError(err instanceof Error ? err.message : "Failed to create share link");
+      setShareError(
+        err instanceof Error ? err.message : "Failed to create share link"
+      );
     } finally {
       setIsSharing(false);
     }
@@ -598,7 +655,10 @@ export default function Home() {
 
   // Helper function to notify the AI agent about code changes
   // Only called when agent is connected (button is disabled otherwise)
-  const notifyAgentAboutCode = async (code: string, source: "imported" | "loaded") => {
+  const notifyAgentAboutCode = async (
+    code: string,
+    source: "imported" | "loaded"
+  ) => {
     if (!isConnected || !credentials || !agentId) {
       console.log("Skipping agent notification - agent not ready");
       return;
@@ -608,7 +668,7 @@ export default function Home() {
       // Create a message informing the agent about the code
       // Using a system message format that won't appear in transcript
       const message = `Current code context:\n\n${code}\n\nPlease be aware of this code when responding.`;
-      
+
       await fetch("/api/agent/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -620,7 +680,7 @@ export default function Home() {
           customerSecret: credentials.agoraCustomerSecret,
         }),
       });
-      
+
       console.log(`Agent notified about ${source} code`);
     } catch (err) {
       console.error("Failed to notify agent about code:", err);
@@ -639,20 +699,21 @@ export default function Home() {
 
     try {
       // Extract paste ID from URL (supports paste.fyi URLs and our view URLs)
-      let pasteId = '';
+      let pasteId = "";
       const url = loadUrl.trim();
-      
+
       // Check if it's a paste.fyi URL
-      if (url.includes('paste.fyi/')) {
-        pasteId = url.split('paste.fyi/')[1]?.split('/')[0]?.split('?')[0] || '';
-      } 
+      if (url.includes("paste.fyi/")) {
+        pasteId =
+          url.split("paste.fyi/")[1]?.split("/")[0]?.split("?")[0] || "";
+      }
       // Check if it's our view URL
-      else if (url.includes('/view/')) {
-        pasteId = url.split('/view/')[1]?.split('/')[0]?.split('?')[0] || '';
+      else if (url.includes("/view/")) {
+        pasteId = url.split("/view/")[1]?.split("/")[0]?.split("?")[0] || "";
       }
       // Assume it's just an ID
       else {
-        pasteId = url.split('/').pop()?.split('?')[0] || url;
+        pasteId = url.split("/").pop()?.split("?")[0] || url;
       }
 
       if (!pasteId) {
@@ -661,27 +722,30 @@ export default function Home() {
 
       // Fetch the paste content
       const response = await fetch(`/api/paste/${pasteId}`);
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to load code from URL");
       }
 
       const data = await response.json();
-      
-      if (!data.content || data.content.trim() === '') {
+
+      if (!data.content || data.content.trim() === "") {
         throw new Error("No code found in this URL");
       }
 
       // Set the loaded code
       setCurrentCode(data.content);
-      
+
       // Add to code blocks history
-      setCodeBlocks(prev => [...prev, {
-        id: `loaded-${Date.now()}`,
-        html: data.content,
-        timestamp: new Date()
-      }]);
+      setCodeBlocks((prev) => [
+        ...prev,
+        {
+          id: `loaded-${Date.now()}`,
+          html: data.content,
+          timestamp: new Date(),
+        },
+      ]);
 
       // Notify the AI agent about the loaded code
       await notifyAgentAboutCode(data.content, "loaded");
@@ -705,16 +769,19 @@ export default function Home() {
 
     try {
       const code = importText.trim();
-      
+
       // Set the imported code
       setCurrentCode(code);
-      
+
       // Add to code blocks history
-      setCodeBlocks(prev => [...prev, {
-        id: `imported-${Date.now()}`,
-        html: code,
-        timestamp: new Date()
-      }]);
+      setCodeBlocks((prev) => [
+        ...prev,
+        {
+          id: `imported-${Date.now()}`,
+          html: code,
+          timestamp: new Date(),
+        },
+      ]);
 
       // Notify the AI agent about the imported code
       await notifyAgentAboutCode(code, "imported");
@@ -725,7 +792,9 @@ export default function Home() {
       setImportError(null);
     } catch (err) {
       console.error("Import error:", err);
-      setImportError(err instanceof Error ? err.message : "Failed to import code");
+      setImportError(
+        err instanceof Error ? err.message : "Failed to import code"
+      );
     }
   };
 
@@ -764,7 +833,9 @@ export default function Home() {
           },
         ]);
       } else {
-        await agoraClientRef.current.startMicrophone();
+        // Use selected device ID if available
+        const deviceId = selectedMicrophoneId || undefined;
+        await agoraClientRef.current.startMicrophone(deviceId);
         setIsMicActive(true);
 
         setTranscript((prev) => [
@@ -780,6 +851,54 @@ export default function Home() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Microphone error");
       console.error("Microphone error:", err);
+    }
+  };
+
+  const handleDeviceChange = async (deviceId: string) => {
+    setSelectedMicrophoneId(deviceId);
+    localStorage.setItem("selectedMicrophoneId", deviceId);
+
+    // If microphone is currently active, restart with new device
+    if (isMicActive && agoraClientRef.current) {
+      try {
+        await agoraClientRef.current.stopMicrophone();
+        await agoraClientRef.current.startMicrophone(deviceId);
+      } catch (err) {
+        console.error("Failed to switch microphone device:", err);
+        setError("Failed to switch microphone device");
+      }
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!chatMessage.trim() || !isConnected || !credentials || !agentId) {
+      return;
+    }
+
+    const messageText = chatMessage.trim();
+    setChatMessage("");
+    setIsSendingMessage(true);
+
+    try {
+      // Send message to agent via RTM
+      // Don't add to transcript here - let the transcription service handle it
+      // This prevents duplicates since RTM will send it back as a transcription
+      await fetch("/api/agent/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: messageText,
+          agentUid: credentials.agoraBotUid,
+          appId: credentials.agoraAppId,
+          customerId: credentials.agoraCustomerId,
+          customerSecret: credentials.agoraCustomerSecret,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      setError("Failed to send message");
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -878,36 +997,53 @@ export default function Home() {
                     )}
                   </button>
                 ) : (
-                <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                  <button
-                    onClick={handleToggleMute}
-                    className={`relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-200 hover:scale-105 ${
-                      isMuted
-                        ? "bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50"
-                        : "bg-green-500/20 hover:bg-green-500/30 border-2 border-green-500/50"
-                    }`}
-                    title={isMuted ? "Unmute microphone" : "Mute microphone"}
-                  >
-                    {isMuted ? (
-                      <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
-                    ) : (
-                      <Mic className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                  <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                    {/* Device Selector - Subtle dropdown */}
+                    {isConnected && microphoneDevices.length > 1 && (
+                      <select
+                        value={selectedMicrophoneId}
+                        onChange={(e) => handleDeviceChange(e.target.value)}
+                        className="bg-slate-800/30 border border-slate-700/50 rounded-md px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-600 transition-colors max-w-[120px] sm:max-w-[140px] opacity-70 hover:opacity-100"
+                        title="Select microphone"
+                      >
+                        {microphoneDevices.map((device) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label ||
+                              `Mic ${device.deviceId.substring(0, 8)}`}
+                          </option>
+                        ))}
+                      </select>
                     )}
-                    {!isMuted && (
-                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    )}
-                  </button>
 
-                  <button
-                    onClick={handleDisconnect}
-                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-slate-700/50 hover:bg-red-500/20 border border-slate-600 hover:border-red-500/50 rounded-full transition-all duration-200 hover:scale-105 text-xs sm:text-sm font-medium"
-                    title="End session"
-                  >
-                    <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300" />
-                    <span className="text-slate-300">End</span>
-                  </button>
-                </div>
-              )}
+                    <button
+                      onClick={handleToggleMute}
+                      className={`relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-200 hover:scale-105 ${
+                        isMuted
+                          ? "bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50"
+                          : "bg-green-500/20 hover:bg-green-500/30 border-2 border-green-500/50"
+                      }`}
+                      title={isMuted ? "Unmute microphone" : "Mute microphone"}
+                    >
+                      {isMuted ? (
+                        <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
+                      ) : (
+                        <Mic className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                      )}
+                      {!isMuted && (
+                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse"></div>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleDisconnect}
+                      className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-slate-700/50 hover:bg-red-500/20 border border-slate-600 hover:border-red-500/50 rounded-full transition-all duration-200 hover:scale-105 text-xs sm:text-sm font-medium"
+                      title="End session"
+                    >
+                      <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300" />
+                      <span className="text-slate-300">End</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -931,12 +1067,14 @@ export default function Home() {
               >
                 ✕
               </button>
-              
+
               <div className="text-center mb-4">
                 <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-3xl">✅</span>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">Link Copied!</h3>
+                <h3 className="text-xl font-bold text-white mb-2">
+                  Link Copied!
+                </h3>
                 <p className="text-slate-400 text-sm">
                   Share this link with anyone to view your generated code
                 </p>
@@ -948,7 +1086,7 @@ export default function Home() {
                   Click URL to copy:
                 </p>
                 <div className="relative">
-                  <div 
+                  <div
                     onClick={handleCopyShareUrl}
                     className="bg-slate-900 rounded-lg p-3 break-all text-sm text-slate-300 font-mono cursor-pointer hover:bg-slate-800 transition-colors border border-slate-700 hover:border-slate-600"
                     title="Click to copy to clipboard"
@@ -982,10 +1120,12 @@ export default function Home() {
               >
                 ✕
               </button>
-              
+
               <div className="mb-4">
-                <h3 className="text-xl font-bold text-white mb-4">Import or Load Code</h3>
-                
+                <h3 className="text-xl font-bold text-white mb-4">
+                  Import or Load Code
+                </h3>
+
                 {/* Tabs */}
                 <div className="flex gap-2 mb-4 border-b border-slate-700">
                   <button
@@ -1016,7 +1156,7 @@ export default function Home() {
                     <p className="text-slate-400 text-sm mb-4">
                       Paste your code below or upload a file
                     </p>
-                    
+
                     <div className="mb-3">
                       <label className="block text-sm text-slate-300 mb-2">
                         Upload File (HTML, TXT, etc.)
@@ -1028,18 +1168,18 @@ export default function Home() {
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
                       />
                     </div>
-                    
+
                     <textarea
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
                       placeholder="Paste your code here..."
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm h-64 resize-none"
                     />
-                    
+
                     {importError && (
                       <p className="text-red-400 text-sm mt-2">{importError}</p>
                     )}
-                    
+
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={handleImportCode}
@@ -1067,9 +1207,10 @@ export default function Home() {
                 {loadImportTab === "load" && (
                   <div>
                     <p className="text-slate-400 text-sm mb-4">
-                      Enter a share URL (paste.fyi or your share link) to load existing code
+                      Enter a share URL (paste.fyi or your share link) to load
+                      existing code
                     </p>
-                    
+
                     <input
                       type="text"
                       value={loadUrl}
@@ -1077,16 +1218,16 @@ export default function Home() {
                       placeholder="https://paste.fyi/XXXXX or https://yoursite.com/view/XXXXX"
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2"
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           handleLoadFromUrl();
                         }
                       }}
                     />
-                    
+
                     {loadError && (
                       <p className="text-red-400 text-sm mb-2">{loadError}</p>
                     )}
-                    
+
                     <div className="flex gap-2">
                       <button
                         onClick={handleLoadFromUrl}
@@ -1150,8 +1291,11 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
           {/* Code View Panel - Larger */}
-          <div className="lg:col-span-4 bg-slate-800/50 backdrop-blur rounded-lg p-4 sm:p-6 shadow-xl">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3 sm:gap-0">
+          <div
+            className="lg:col-span-4 bg-slate-800/50 backdrop-blur rounded-lg p-4 sm:p-6 shadow-xl flex flex-col"
+            style={{ minHeight: "700px" }}
+          >
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3 sm:gap-0 flex-shrink-0">
               <h2 className="text-lg sm:text-xl font-bold text-slate-200">
                 {showSourceCode ? "Source Code" : "Preview"}
               </h2>
@@ -1189,7 +1333,11 @@ export default function Home() {
                   }}
                   disabled={!isConnected}
                   className="bg-cyan-600 hover:bg-cyan-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={isConnected ? "Import or load code" : "Start session first to import code"}
+                  title={
+                    isConnected
+                      ? "Import or load code"
+                      : "Start session first to import code"
+                  }
                 >
                   <Upload className="w-4 h-4" />
                   <span className="hidden sm:inline">Import</span>
@@ -1260,8 +1408,12 @@ export default function Home() {
               </div>
             </div>
             <div
-              className="h-[400px] sm:h-[500px] lg:h-[600px] rounded-lg shadow-inner relative"
-              style={{ overflow: "hidden", isolation: "isolate" }}
+              className="flex-1 min-h-0 rounded-lg shadow-inner relative"
+              style={{
+                overflow: "hidden",
+                isolation: "isolate",
+                minHeight: "600px",
+              }}
             >
               {currentCode ? (
                 <>
@@ -1283,7 +1435,7 @@ export default function Home() {
                           </>
                         )}
                       </button>
-                      <CodeHighlight 
+                      <CodeHighlight
                         code={currentCode}
                         language="html"
                         theme="github-dark"
@@ -1331,18 +1483,23 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Transcript Panel - Minimal */}
-          <div className="lg:col-span-1 bg-slate-800/30 backdrop-blur rounded-lg p-3 sm:p-4 shadow-lg">
-            <h2 className="text-base sm:text-lg font-semibold mb-3 text-slate-300">
-              Transcript
+          {/* Chat Panel */}
+          <div
+            className="lg:col-span-1 bg-slate-800/30 backdrop-blur rounded-lg p-3 sm:p-4 shadow-lg flex flex-col"
+            style={{ height: "700px", maxHeight: "700px" }}
+          >
+            <h2 className="text-base sm:text-lg font-semibold mb-3 text-slate-300 flex-shrink-0">
+              Chat
             </h2>
             <div
               ref={transcriptContainerRef}
-              className="space-y-2 h-[300px] sm:h-[400px] lg:h-[600px] overflow-y-auto text-sm"
+              className="space-y-2 flex-1 overflow-y-auto text-sm mb-3 min-h-0"
             >
               {transcript.length === 0 ? (
                 <p className="text-slate-500 text-center py-4 text-xs">
-                  Conversation log
+                  {isConnected
+                    ? "Start chatting..."
+                    : "Connect to start chatting"}
                 </p>
               ) : (
                 transcript.map((msg) => (
@@ -1362,7 +1519,7 @@ export default function Home() {
                         {msg.timestamp.toLocaleTimeString()}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-200 leading-relaxed">
+                    <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
                       {msg.text}
                     </p>
                   </div>
@@ -1370,6 +1527,38 @@ export default function Home() {
               )}
               <div ref={transcriptEndRef} />
             </div>
+
+            {/* Chat Input */}
+            {isConnected && (
+              <div className="flex gap-2 border-t border-slate-700 pt-3 flex-shrink-0">
+                <input
+                  type="text"
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Type a message..."
+                  disabled={isSendingMessage}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!chatMessage.trim() || isSendingMessage}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center"
+                  title="Send message"
+                >
+                  {isSendingMessage ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

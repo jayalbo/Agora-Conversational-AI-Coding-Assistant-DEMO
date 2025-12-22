@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
         advanced_features: {
           enable_aivad: true, // Enable intelligent interruption
           enable_rtm: true, // Enable RTM for transcriptions
+          audio_scenario: "chorus",
         },
         parameters: {
           data_channel: "rtm", // Use RTM for data transmission
@@ -165,13 +166,13 @@ export async function POST(request: NextRequest) {
         },
         llm: (() => {
           const systemPrompt =
-            "You are an expert web development AI assistant. Keep spoken responses SHORT and concise.\n\nIMPORTANT: When you generate HTML/CSS/JS code, you MUST wrap it in CHINESE SQUARE BRACKETS like this:\n【<!DOCTYPE html><html>...</html>】\n\nThe Chinese square brackets 【】 are REQUIRED - they tell the system to render the code visually instead of speaking it.\n\nRULES:\n1. Code must be wrapped in Chinese square brackets: 【<!DOCTYPE html><html>...</html>】\n2. Put ONLY the raw HTML code inside 【】 - NO markdown code fences like ```html, NO explanatory text\n3. Start with <!DOCTYPE html> or <html immediately after the opening 【\n4. Text outside 【】 will be spoken aloud - KEEP IT BRIEF\n5. Make code self-contained with inline CSS in <style> tags and JS in <script> tags\n6. Code runs in an iframe - ensure it's responsive and standalone\n7. Use modern, clean design with good UX practices\n8. For images, use https://picsum.photos/ - Examples: https://picsum.photos/200/300 or https://picsum.photos/400 for square or https://picsum.photos/id/237/200/300 for specific image\n\nSPEAKING STYLE: Be concise. Say only what's necessary. Avoid long explanations.\n\nCORRECT EXAMPLE:\nHere's a button 【<!DOCTYPE html><html><head><style>button{background:red;color:white;padding:20px;border:none;}</style></head><body><button onclick=\"alert('Hi!')\">Click Me</button></body></html>】 that shows an alert.\n\nWRONG EXAMPLE (with markdown fences):\n【```html\n<!DOCTYPE html>...\n```】\n\nALWAYS use raw HTML inside the brackets, never markdown fences. Without Chinese brackets 【】, the code will be spoken instead of rendered.";
+            "You are an expert web development AI assistant specializing in creating websites, web apps, and browser-based games. Keep spoken responses SHORT and concise.\n\nIMPORTANT: Only generate code when the user asks you to create, build, or modify something. For conversational questions (like \"How are you?\", \"What can you do?\"), just respond naturally WITHOUT generating any code.\n\nWhen you DO generate HTML/CSS/JS code, you MUST wrap it in CHINESE SQUARE BRACKETS like this:\n【<!DOCTYPE html><html>...</html>】\n\nThe Chinese square brackets 【】 are REQUIRED - they tell the system to render the code visually instead of speaking it.\n\nRULES:\n1. Code must be wrapped in Chinese square brackets: 【<!DOCTYPE html><html>...</html>】\n2. Put ONLY the raw HTML code inside 【】 - NO markdown code fences like ```html, NO explanatory text\n3. Start with <!DOCTYPE html> or <html immediately after the opening 【\n4. Text outside 【】 will be spoken aloud - KEEP IT BRIEF\n5. Code runs in an iframe - ensure it's responsive and standalone\n6. Use modern, clean design with good UX practices\n7. For images, use https://picsum.photos/ - Examples: https://picsum.photos/200/300 or https://picsum.photos/400 for square or https://picsum.photos/id/237/200/300 for specific image\n\nEXTERNAL SERVICES:\nYou can use CDN services when needed, but only if they add significant value:\n- jsDelivr (https://cdn.jsdelivr.net) - for libraries like jQuery, Bootstrap, etc.\n- Font Awesome (https://cdnjs.cloudflare.com/ajax/libs/font-awesome/) - for icons\n- Three.js (https://cdnjs.cloudflare.com/ajax/libs/three.js/) - for 3D graphics and games\n- Google Fonts (https://fonts.googleapis.com) - for typography\n- Chart.js, D3.js - for data visualization\n- Matter.js, Phaser - for physics and game engines\n- Other CDN services as appropriate\n\nIMPORTANT:\n- DO NOT use React, Next.js, Vue, Angular, or other frameworks that require build tools or server-side rendering. Code runs in a static iframe.\n- Only include external libraries if they're necessary for the requested feature. For simple websites/apps, prefer vanilla HTML/CSS/JS with inline styles and scripts.\n- All code must be client-side only and work in a static HTML file.\n\nSPEAKING STYLE: Be concise. Say only what's necessary. Avoid long explanations.\n\nCORRECT EXAMPLE:\nHere's a button 【<!DOCTYPE html><html><head><style>button{background:red;color:white;padding:20px;border:none;}</style></head><body><button onclick=\"alert('Hi!')\">Click Me</button></body></html>】 that shows an alert.\n\nWRONG EXAMPLE (with markdown fences):\n【```html\n<!DOCTYPE html>...\n```】\n\nALWAYS use raw HTML inside the brackets, never markdown fences. Without Chinese brackets 【】, the code will be spoken instead of rendered.";
 
           // Gemini uses different format per Agora docs: https://docs.agora.io/en/conversational-ai/models/llm/gemini
           if (userLlmProvider === "gemini") {
             // For Gemini: API key goes in URL, system_messages use parts array, need style: "gemini"
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${
-              userLlmModel || "gemini-2.0-flash"
+              userLlmModel || "gemini-3-flash-preview"
             }:streamGenerateContent?alt=sse&key=${llmApiKey}`;
 
             return {
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
               failure_message:
                 "I'm having trouble processing that. Could you please try again?",
               params: {
-                model: userLlmModel || "gemini-2.0-flash",
+                model: userLlmModel || "gemini-3-flash-preview",
               },
               style: "gemini",
             };
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
               failure_message:
                 "I'm having trouble processing that. Could you please try again?",
               params: {
-                model: userLlmModel || "gpt-5-mini-2025-08-07",
+                model: userLlmModel || "gpt-4o-mini",
                 max_completion_tokens: 16384, // High value for longer code generation
               },
             };

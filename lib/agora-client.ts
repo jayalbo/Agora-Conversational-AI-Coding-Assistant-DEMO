@@ -81,14 +81,15 @@ export class AgoraConversationalClient {
     this.client.on(
       "user-published",
       async (user: IAgoraRTCRemoteUser, mediaType: "audio" | "video") => {
+        // Subscribe to the user's media
         await this.client!.subscribe(user, mediaType);
 
         // When the bot publishes audio, play it immediately
-        // This is how we hear the AI's voice responses
         if (mediaType === "audio" && user.uid === this.botUid) {
           const remoteAudioTrack = user.audioTrack;
           if (remoteAudioTrack) {
-            remoteAudioTrack.play(); // Play through browser's audio output
+            remoteAudioTrack.play();
+            console.log("Bot audio subscribed and playing");
           }
         }
       }
@@ -109,6 +110,42 @@ export class AgoraConversationalClient {
   }
 
   /**
+   * Joins the RTC channel. Call this before publishing audio.
+   */
+  async joinChannel() {
+    if (!this.client) {
+      this.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
+      // Listen for when users (especially the AI bot) publish audio/video
+      this.client.on(
+        "user-published",
+        async (user: IAgoraRTCRemoteUser, mediaType: "audio" | "video") => {
+          await this.client!.subscribe(user, mediaType);
+
+          // When the bot publishes audio, play it immediately
+          if (mediaType === "audio" && user.uid === this.botUid) {
+            const remoteAudioTrack = user.audioTrack;
+            if (remoteAudioTrack) {
+              remoteAudioTrack.play();
+              console.log("Bot audio subscribed and playing");
+            }
+          }
+        }
+      );
+
+      // Listen for when users stop publishing (bot leaves)
+      this.client.on("user-unpublished", (user: IAgoraRTCRemoteUser) => {
+        if (user.uid === this.botUid) {
+          console.log("Bot disconnected");
+        }
+      });
+    }
+
+    // Join the channel
+    await this.client.join(this.appId, this.channel, this.token, this.uid);
+  }
+
+  /**
    * Initializes RTM (Real-Time Messaging) for transcriptions.
    * 
    * CRITICAL: RTM2 uses string UIDs while RTC uses numeric UIDs.
@@ -123,7 +160,7 @@ export class AgoraConversationalClient {
    *   final: boolean
    * }
    */
-  private async initializeRTM() {
+  async initializeRTM() {
     try {
       // Create RTM client instance using the correct API
       const { RTM } = AgoraRTM;
@@ -263,21 +300,73 @@ export class AgoraConversationalClient {
   }
 
   /**
-   * Starts the microphone and publishes audio to the channel.
+   * Creates the microphone track. Call this before joining the channel.
    * 
    * The "speech_standard" encoder config optimizes for voice (vs music):
    * - Lower bitrate (saves bandwidth)
    * - Noise suppression
    * - Echo cancellation
    * - Automatic gain control
+   * 
+   * @param deviceId - Optional microphone device ID. If not provided, uses default device.
    */
-  async startMicrophone() {
-    this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+  async createMicrophoneTrack(deviceId?: string) {
+    const config: any = {
       encoderConfig: "speech_standard", // Optimize for voice, not music
-    });
+    };
+    
+    if (deviceId) {
+      config.microphoneId = deviceId;
+    }
+
+    this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack(config);
+  }
+
+  /**
+   * Publishes the microphone track to the channel.
+   * Must be called after joinChannel() and createMicrophoneTrack().
+   */
+  async publishMicrophone() {
+    if (!this.localAudioTrack) {
+      throw new Error("Microphone track not created. Call createMicrophoneTrack() first.");
+    }
+    if (!this.client) {
+      throw new Error("Not connected to channel. Call joinChannel() first.");
+    }
 
     // Publish audio track to channel (AI agent will receive it)
-    await this.client!.publish([this.localAudioTrack]);
+    await this.client.publish([this.localAudioTrack]);
+  }
+
+  /**
+   * Starts the microphone and publishes audio to the channel.
+   * This is a convenience method that combines createMicrophoneTrack and publishMicrophone.
+   * 
+   * @param deviceId - Optional microphone device ID. If not provided, uses default device.
+   */
+  async startMicrophone(deviceId?: string) {
+    await this.createMicrophoneTrack(deviceId);
+    await this.publishMicrophone();
+  }
+
+  /**
+   * Gets list of available microphone devices.
+   * 
+   * @returns Array of microphone device information
+   */
+  static async getMicrophoneDevices(): Promise<MediaDeviceInfo[]> {
+    // Only run in browser
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      const devices = await AgoraRTC.getMicrophones();
+      return devices;
+    } catch (error) {
+      console.error("Failed to get microphone devices:", error);
+      return [];
+    }
   }
 
   /**

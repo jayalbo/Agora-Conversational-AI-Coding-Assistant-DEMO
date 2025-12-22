@@ -35,7 +35,7 @@ const defaultCredentials: UserCredentials = {
   llmProvider: "openai",
   llmUrl: "https://api.openai.com/v1/chat/completions",
   llmApiKey: "",
-  llmModel: "gpt-4o",
+  llmModel: "gpt-4o-mini",
   ttsApiKey: "",
   ttsRegion: "westus",
 };
@@ -48,17 +48,17 @@ const LLM_PROVIDERS = {
     apiKeyPlaceholder: "sk-proj-...",
     apiKeyLink: "https://platform.openai.com/api-keys",
     apiKeyLinkText: "OpenAI Platform",
-    defaultModel: "gpt-4o",
+    defaultModel: "gpt-4o-mini",
   },
   gemini: {
     name: "Google Gemini",
     // Gemini URL format: API key goes in query parameter
     // The actual URL will be constructed in the API route with the API key
-    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key={api_key}",
+    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:streamGenerateContent?alt=sse&key={api_key}",
     apiKeyPlaceholder: "AIza...",
     apiKeyLink: "https://ai.google.dev/",
     apiKeyLinkText: "Google AI Studio",
-    defaultModel: "gemini-2.0-flash",
+    defaultModel: "gemini-3-flash-preview",
   },
 };
 
@@ -80,7 +80,7 @@ export default function SettingsModal({
       const migratedCredentials = {
         ...initialCredentials,
         llmProvider: initialCredentials.llmProvider || "openai" as LLMProvider,
-        llmModel: initialCredentials.llmModel || (initialCredentials.llmProvider === "gemini" ? "gemini-2.0-flash" : "gpt-4o"),
+        llmModel: initialCredentials.llmModel || (initialCredentials.llmProvider === "gemini" ? "gemini-3-flash-preview" : "gpt-4o-mini"),
       };
       setCredentials(migratedCredentials);
     }
@@ -165,7 +165,7 @@ export default function SettingsModal({
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-slate-800 border-b border-slate-700 p-6 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-slate-800 border-b border-slate-700 p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Settings className="w-6 h-6 text-purple-400" />
             <h2 className="text-2xl font-bold text-white">Settings</h2>
@@ -267,8 +267,8 @@ export default function SettingsModal({
                 onChange={(e) => handleChange("llmProvider", e.target.value)}
                 className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500 transition-colors"
               >
-                <option value="openai">OpenAI (GPT-4o)</option>
-                <option value="gemini">Google Gemini (Gemini 2.0 Flash)</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
               </select>
             </div>
 
@@ -292,8 +292,8 @@ export default function SettingsModal({
               error={errors.llmModel}
               placeholder={
                 credentials.llmProvider === "gemini"
-                  ? "gemini-2.0-flash"
-                  : "gpt-4o"
+                  ? "gemini-3-flash-preview"
+                  : "gpt-4o-mini"
               }
             />
 
@@ -366,7 +366,7 @@ export default function SettingsModal({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-slate-800 border-t border-slate-700 p-6 flex items-center justify-between">
+        <div className="sticky bottom-0 z-10 bg-slate-800 border-t border-slate-700 p-6 flex items-center justify-between">
           <button
             onClick={onClose}
             className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
@@ -456,7 +456,7 @@ function SecretInputField({
         <button
           type="button"
           onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors z-0"
         >
           {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
         </button>
