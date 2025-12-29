@@ -102,12 +102,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine provider
-    const isOpenAI = llmUrl.includes("api.openai.com");
+    // Gemini uses a different format, all other LLMs supported by Agora follow OpenAI format
     const isGemini = llmUrl.includes("generativelanguage.googleapis.com");
+    const isOpenAI = !isGemini; // Default to OpenAI format for all non-Gemini LLMs
 
     console.log(
       `🌐 Provider: ${
-        isGemini ? "Gemini" : isOpenAI ? "OpenAI" : "Unknown"
+        isGemini ? "Gemini" : "OpenAI-compatible"
       }, URL: ${llmUrl.substring(0, 80)}...`
     );
 
