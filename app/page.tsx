@@ -899,6 +899,7 @@ export default function Home() {
             type: "user",
             text: "[Microphone stopped]",
             timestamp: new Date(),
+            isFinal: true,
           },
         ]);
       } else {
@@ -914,6 +915,7 @@ export default function Home() {
             type: "user",
             text: "[Microphone started]",
             timestamp: new Date(),
+            isFinal: true,
           },
         ]);
       }
