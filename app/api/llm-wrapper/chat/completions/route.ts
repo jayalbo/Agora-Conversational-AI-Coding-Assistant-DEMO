@@ -105,6 +105,12 @@ export async function POST(request: NextRequest) {
     const isOpenAI = llmUrl.includes("api.openai.com");
     const isGemini = llmUrl.includes("generativelanguage.googleapis.com");
 
+    console.log(
+      `🌐 Provider: ${
+        isGemini ? "Gemini" : isOpenAI ? "OpenAI" : "Unknown"
+      }, URL: ${llmUrl.substring(0, 80)}...`
+    );
+
     // Extract system message if present
     let systemMessage: string | undefined;
     const conversationMessages: any[] = [];
@@ -196,9 +202,10 @@ export async function POST(request: NextRequest) {
     if (allTools) {
       streamOptions.tools = allTools;
       // stopWhen controls when to stop generation. Default is stepCountIs(1) which stops after 1 step.
-      // We need multiple steps: 1) tool call, 2) follow-up response with tool results
-      // Set to 5 to allow multiple tool call rounds with follow-up responses
-      streamOptions.stopWhen = stepCountIs(5);
+      // We need multiple steps: tool calls + follow-up responses with text
+      // Set to 7 to allow up to 5 tool call rounds + 2 steps for final text generation
+      // This ensures we always get a text response even after tool calls
+      streamOptions.stopWhen = stepCountIs(7);
     }
 
     const startTime = Date.now();
@@ -225,30 +232,43 @@ export async function POST(request: NextRequest) {
           let streamCreated = Math.floor(Date.now() / 1000);
           let hasSentContent = false;
           let toolCallsDetected = false;
+          let waitingMessageSent = false; // Track if we've already sent a waiting message
+
+          // Friendly waiting messages - pick one randomly per request
+          const waitingMessages = [
+            "Just a moment, I'm looking that up for you...",
+            "Let me find that information for you...",
+            "Give me a sec to check that...",
+            "Looking into that now...",
+          ];
 
           // Use fullStream to capture all events including tool calls
           let roundNumber = 0;
+          let chunkCount = 0;
           for await (const chunk of result.fullStream) {
+            chunkCount++;
+            const chunkType = (chunk as any).type;
+
             // Log chunk type for debugging
-            if (chunk.type === "tool-call") {
+            if (chunkType === "tool-call") {
               toolCallsDetected = true;
               roundNumber++;
+              const toolCallChunk = chunk as any;
               console.log(
-                `🔧 [Round ${roundNumber}] Tool call detected: ${chunk.toolName} with input:`,
-                JSON.stringify(chunk.input).substring(0, 100)
+                `🔧 [Round ${roundNumber}] Tool call detected: ${toolCallChunk.toolName} with input:`,
+                JSON.stringify(toolCallChunk.input).substring(0, 100)
               );
-            } else if (chunk.type === "tool-result") {
-              console.log(
-                `✅ [Round ${roundNumber}] Tool result received for: ${chunk.toolName}`
-              );
-            } else if (chunk.type === "text-delta") {
-              // text-delta chunks contain incremental text deltas (not accumulated)
-              // So chunk.text is already the delta we need to send
-              const delta = chunk.text;
 
-              if (delta) {
-                hasSentContent = true;
-                const data = {
+              // Send waiting message only once per request when first MCP tool is called
+              if (!waitingMessageSent) {
+                // Pick a random friendly waiting message
+                const waitingMessage =
+                  waitingMessages[
+                    Math.floor(Math.random() * waitingMessages.length)
+                  ];
+
+                // Send waiting message as a text delta chunk
+                const waitingData = {
                   id: streamId,
                   object: "chat.completion.chunk",
                   created: streamCreated,
@@ -256,23 +276,104 @@ export async function POST(request: NextRequest) {
                   choices: [
                     {
                       index: 0,
-                      delta: { content: delta },
+                      delta: { content: waitingMessage },
                       finish_reason: null,
                     },
                   ],
                 };
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+                const encodedWaitingChunk = `data: ${JSON.stringify(
+                  waitingData
+                )}\n\n`;
+                console.log(`⏳ Sending waiting message: "${waitingMessage}"`);
+                controller.enqueue(encoder.encode(encodedWaitingChunk));
+                waitingMessageSent = true; // Mark as sent so we don't send it again
+              }
+            } else if (chunkType === "tool-result") {
+              const toolResultChunk = chunk as any;
+              console.log(
+                `✅ [Round ${roundNumber}] Tool result received for: ${toolResultChunk.toolName}`
+              );
+            } else if (chunkType === "text-delta") {
+              // text-delta chunks contain incremental text deltas (not accumulated)
+              // So chunk.text is already the delta we need to send
+              const textDeltaChunk = chunk as any;
+              const delta = textDeltaChunk.text;
+
+              if (delta) {
+                hasSentContent = true;
+                console.log(
+                  `📝 [Round ${roundNumber}] Text delta (${
+                    delta.length
+                  } chars): "${delta.substring(0, 50)}${
+                    delta.length > 50 ? "..." : ""
+                  }"`
+                );
+                // For Gemini, if we get a large chunk (like 75 chars), split it into smaller pieces
+                // to match OpenAI's incremental streaming format that Agora expects
+                if (isGemini && delta.length > 20) {
+                  console.log(
+                    `✂️ Gemini large chunk (${delta.length} chars), splitting into ~10 char chunks`
+                  );
+                  // Split into chunks of ~10 characters each to simulate incremental streaming
+                  const chunkSize = 10;
+                  for (let i = 0; i < delta.length; i += chunkSize) {
+                    const smallChunk = delta.slice(i, i + chunkSize);
+                    const data = {
+                      id: streamId,
+                      object: "chat.completion.chunk",
+                      created: streamCreated,
+                      model: modelName,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: { content: smallChunk },
+                          finish_reason: null,
+                        },
+                      ],
+                    };
+                    const encodedChunk = `data: ${JSON.stringify(data)}\n\n`;
+                    controller.enqueue(encoder.encode(encodedChunk));
+                  }
+                  console.log(
+                    `📤 Sent ${Math.ceil(
+                      delta.length / chunkSize
+                    )} split chunks`
+                  );
+                } else {
+                  // Send as-is for OpenAI or small Gemini chunks
+                  const data = {
+                    id: streamId,
+                    object: "chat.completion.chunk",
+                    created: streamCreated,
+                    model: modelName,
+                    choices: [
+                      {
+                        index: 0,
+                        delta: { content: delta },
+                        finish_reason: null,
+                      },
+                    ],
+                  };
+                  const encodedChunk = `data: ${JSON.stringify(data)}\n\n`;
+                  console.log(
+                    `📤 Enqueuing SSE chunk (${encodedChunk.length} bytes) to stream`
+                  );
+                  controller.enqueue(encoder.encode(encodedChunk));
+                }
+              } else {
+                console.log(
+                  `⚠️ [Round ${roundNumber}] Empty text-delta chunk received`
                 );
               }
-            } else if (chunk.type === "finish") {
+            } else if (chunkType === "finish") {
+              const finishChunk = chunk as any;
               console.log(
-                `✅ [Round ${roundNumber}] Finish event. Reason: ${chunk.finishReason}, Content sent: ${hasSentContent}`
+                `✅ [Round ${roundNumber}] Finish event. Reason: ${finishChunk.finishReason}, Content sent: ${hasSentContent}, Total chunks: ${chunkCount}`
               );
 
               // Only send final chunk if finishReason is "stop" (final completion)
               // If it's "tool-calls", the stream should continue with another round
-              if (chunk.finishReason === "stop") {
+              if (finishChunk.finishReason === "stop") {
                 console.log(`🏁 Final completion received`);
                 const finalData = {
                   id: streamId,
@@ -290,26 +391,71 @@ export async function POST(request: NextRequest) {
                 controller.enqueue(
                   encoder.encode(`data: ${JSON.stringify(finalData)}\n\n`)
                 );
-              } else if (chunk.finishReason === "tool-calls") {
+              } else if (finishChunk.finishReason === "tool-calls") {
                 console.log(
                   `⏳ Tool round completed, waiting for follow-up response (maxToolRoundtrips should handle this)...`
                 );
                 // Don't send final chunk - the stream should continue
                 // The loop should continue if maxToolRoundtrips > 1
               }
+            } else {
+              // Log unknown chunk types for debugging (especially for Gemini)
+              console.log(
+                `📦 [Round ${roundNumber}] Chunk type: ${chunkType}, Provider: ${
+                  isGemini ? "Gemini" : "OpenAI"
+                }`
+              );
             }
-            // Ignore other chunk types (start, start-step, text-start, text-end, finish-step, tool-input-*, etc.)
           }
 
           console.log(
-            `🔚 Stream iteration completed. Total rounds: ${roundNumber}, Content sent: ${hasSentContent}`
+            `🔚 Stream iteration completed. Total rounds: ${roundNumber}, Content sent: ${hasSentContent}, Total chunks processed: ${chunkCount}, Provider: ${
+              isGemini ? "Gemini" : "OpenAI"
+            }`
           );
 
-          // Fallback: if we never sent content, ensure we send final chunk
+          // Fallback: if we never sent content, send a helpful message
+          // This can happen when tool calls hit the limit without finding results
           if (!hasSentContent) {
             console.log(
-              `⚠️ No content sent, sending final chunk. Tool calls: ${toolCallsDetected}`
+              `⚠️ No content sent, sending helpful fallback message. Tool calls: ${toolCallsDetected}, Rounds: ${roundNumber}`
             );
+
+            // Construct a helpful fallback message
+            const fallbackMessages = [
+              "I wasn't able to find specific information about that, but I'm here to help with anything else you need!",
+              "I checked a few sources but couldn't find that information. Feel free to ask me something else!",
+              "I wasn't able to locate that information with the tools available. What else can I help you with?",
+              "Unfortunately, I couldn't find the information you're looking for. Is there anything else I can help with?",
+            ];
+            const fallbackMessage =
+              fallbackMessages[
+                Math.floor(Math.random() * fallbackMessages.length)
+              ];
+
+            // Send the fallback message as text deltas (split for consistency)
+            const chunkSize = 15;
+            for (let i = 0; i < fallbackMessage.length; i += chunkSize) {
+              const chunk = fallbackMessage.slice(i, i + chunkSize);
+              const data = {
+                id: streamId,
+                object: "chat.completion.chunk",
+                created: streamCreated,
+                model: modelName,
+                choices: [
+                  {
+                    index: 0,
+                    delta: { content: chunk },
+                    finish_reason: null,
+                  },
+                ],
+              };
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+              );
+            }
+
+            // Send final chunk
             const finalData = {
               id: streamId,
               object: "chat.completion.chunk",

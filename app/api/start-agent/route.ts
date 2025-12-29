@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
             const mcpNames = mcps
               .map((mcp: any) => mcp.name || "Unknown")
               .join(", ");
-            systemPrompt += `\n\nEXTERNAL TOOLS AVAILABLE:\nYou have access to external tools and services through integrated MCP (Model Context Protocol) connections: ${mcpNames}.\n\nIMPORTANT TOOL USAGE GUIDELINES:\n- When users ask questions that could be answered by your available tools, USE THEM AUTOMATICALLY\n- Don't wait for explicit permission - if a tool can provide better, real-time information, use it\n- Review the available tool descriptions to understand what each tool can do\n- Use tools proactively to provide accurate, up-to-date information rather than relying on your training data\n- If you're unsure about something that your tools can help with, USE THE TOOLS to find out\n\nBe proactive in using available tools to enhance your responses with real-time, accurate information.`;
+            systemPrompt += `\n\nEXTERNAL TOOLS AVAILABLE:\nYou have access to external tools and services through integrated MCP (Model Context Protocol) connections: ${mcpNames}.\n\nIMPORTANT TOOL USAGE GUIDELINES:\n- When users ask questions that could be answered by your available tools, USE THEM AUTOMATICALLY\n- Don't wait for explicit permission - if a tool can provide better, real-time information, use it\n- Review the available tool descriptions to understand what each tool can do\n- Use tools proactively to provide accurate, up-to-date information rather than relying on your training data\n- If you're unsure about something that your tools can help with, USE THE TOOLS to find out\n\nCRITICAL: ALWAYS FULFILL THE CORE REQUEST:\n- If a user asks you to CREATE, BUILD, or MAKE something (like a website, app, or code), you MUST ALWAYS fulfill that request\n- If your tools cannot find specific information (like a person's photo, specific data, etc.), STILL CREATE what was requested but:\n  * Briefly mention that you couldn't find the specific information (e.g., "I couldn't find a picture of [person], so I'm using a placeholder image")\n  * Use appropriate placeholders (e.g., placeholder images from https://picsum.photos/, placeholder text, default values)\n  * Complete the full request as asked - never leave it empty or incomplete\n- Example: If asked "create a website with a picture of John Doe", and tools can't find John Doe's picture:\n  * Say: "I couldn't find a picture of John Doe, so I'm using a placeholder image for now."\n  * Then: Generate the complete website code with a placeholder image\n- NEVER respond with only "I couldn't find that" - always provide the requested creation with placeholders\n\nBe proactive in using available tools to enhance your responses with real-time, accurate information.`;
           }
 
           // Build wrapper URL if MCPs are configured
@@ -205,16 +205,16 @@ export async function POST(request: NextRequest) {
             )}&mcps=${encodeURIComponent(encodedMcps)}`;
           }
 
-          // Gemini uses different format per Agora docs: https://docs.agora.io/en/conversational-ai/models/llm/gemini
-          if (userLlmProvider === "gemini") {
+          // When using wrapper, always use OpenAI format (wrapper returns OpenAI-compatible format)
+          // Only use Gemini format when directly calling Gemini without wrapper
+          if (userLlmProvider === "gemini" && !wrapperUrl) {
+            // Direct Gemini call without wrapper - use Gemini format
             const actualGeminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${
               userLlmModel || "gemini-3-flash-preview"
             }:streamGenerateContent?alt=sse&key=${llmApiKey}`;
 
-            const finalUrl = wrapperUrl || actualGeminiUrl;
-
             return {
-              url: finalUrl,
+              url: actualGeminiUrl,
               system_messages: [
                 {
                   parts: [
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
               style: "gemini",
             };
           } else {
-            // OpenAI format (default)
+            // OpenAI format (default) or wrapper (which returns OpenAI-compatible format)
             const finalUrl = wrapperUrl || llmUrl;
 
             return {
@@ -254,7 +254,11 @@ export async function POST(request: NextRequest) {
               failure_message:
                 "I'm having trouble processing that. Could you please try again?",
               params: {
-                model: userLlmModel || "gpt-4o-mini",
+                model:
+                  userLlmModel ||
+                  (userLlmProvider === "gemini"
+                    ? "gemini-3-flash-preview"
+                    : "gpt-4o-mini"),
                 max_completion_tokens: 16384,
               },
             };

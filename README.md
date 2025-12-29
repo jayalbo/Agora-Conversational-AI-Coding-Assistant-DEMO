@@ -405,6 +405,19 @@ The mic button:
 
 When MCP servers are configured, the AI will automatically use available tools when relevant. For example, if you ask about GitHub repositories, it will use GitHub MCP tools to fetch real-time information.
 
+### Smart Request Handling
+
+The AI is designed to always fulfill your requests, even when tools can't find specific information:
+
+- **Waiting Messages**: When MCP tools are called, you'll hear a friendly message like "Just a moment, I'm looking that up for you..." to indicate the AI is processing your request.
+
+- **Fallback to Placeholders**: If the AI can't find specific information (like a person's photo or specific data), it will:
+  - Acknowledge that it couldn't find the specific information
+  - Still complete your request using appropriate placeholders
+  - Use placeholder images (Picsum Photos) when needed
+
+**Example**: If you ask "create a website with a picture of John Doe" and the tools can't find John Doe's photo, the AI will say "I couldn't find a picture of John Doe, so I'm using a placeholder image for now" and then create the website with a placeholder image.
+
 > **Note**: MCP integration is experimental. Ensure your MCP server is accessible and properly configured.
 
 ## 🚢 Deployment
