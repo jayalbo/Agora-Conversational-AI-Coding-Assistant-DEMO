@@ -20,6 +20,8 @@ Built for **LA Tech Week** by [ConvoAI](https://convoai.world) × [Agora](https:
 - 🔗 **Share Code**: Create shareable links via dpaste.org (365-day expiry)
 - 🎨 **Modern UI**: Beautiful gradient design with responsive layout
 - 🌐 **Auto Images**: Uses Picsum Photos for all image generation
+- 🤖 **Multiple LLM Support**: Works with OpenAI GPT-4o and Google Gemini
+- 🔌 **MCP Integration** (Experimental): Connect Model Context Protocol servers for extended tool capabilities (GitHub, SerpAPI, etc.)
 
 ## 🎬 How It Works
 
@@ -49,8 +51,10 @@ Here's a beautiful button 【<!DOCTYPE html><html>...</html>】 that you can int
 2. **Click the "Settings" button** in the top-right corner
 3. **Enter your own API credentials:**
    - Agora credentials (App ID, Certificate, Customer ID/Secret, Bot UID)
-   - OpenAI API key (for LLM)
+   - LLM Provider: Choose OpenAI or Google Gemini
+   - LLM API key (OpenAI API key or Gemini API key)
    - Azure TTS API key and region (for text-to-speech)
+   - (Optional) MCP servers for extended tool capabilities
 4. **Click "Save Credentials"** - they're stored locally in your browser
 5. **Click "Start Session"** and start talking!
 
@@ -95,9 +99,12 @@ When visitors use your live demo, they need to obtain their own credentials from
 - Customer ID & Secret (from RESTful API section)
 - Bot UID (any unique number, e.g., 1001)
 
-**2. OpenAI API Key** → [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+**2. LLM API Key** → Choose one:
 
-- Requires GPT-4o access
+- **OpenAI** → [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+  - Requires GPT-4o access
+- **Google Gemini** → [ai.google.dev](https://ai.google.dev)
+  - Get API key from Google AI Studio
 
 **3. Azure TTS** → [portal.azure.com](https://portal.azure.com)
 
@@ -113,7 +120,8 @@ When visitors use your live demo, they need to obtain their own credentials from
 - **Icons**: Lucide React (professional icon library)
 - **Real-time Communication**: Agora RTC SDK 4.x
 - **Real-time Messaging**: Agora RTM SDK 2.x
-- **AI Integration**: Agora Conversational AI (GPT-4o + Azure TTS)
+- **AI Integration**: Agora Conversational AI (OpenAI GPT-4o or Google Gemini + Azure TTS)
+- **MCP Support**: Model Context Protocol integration for extended tool capabilities
 - **File Export**: JSZip for client-side .zip generation
 
 ### Project Structure
@@ -166,6 +174,7 @@ Agora client wrapper featuring:
 - **`/api/token`**: Generates RTC tokens server-side for security
 - **`/api/start-agent`**: Initializes Conversational AI agent with custom prompt
 - **`/api/leave-agent`**: Properly shuts down the AI agent
+- **`/api/llm-wrapper/chat/completions`**: Custom LLM wrapper that integrates MCP tools and handles streaming for both OpenAI and Gemini
 
 ### Connection Flow
 
@@ -372,6 +381,31 @@ The mic button:
 - Green when active, red when muted
 - Animated pulse dot when transmitting
 - Doesn't disconnect, just stops audio
+
+## 🔌 MCP (Model Context Protocol) Support
+
+**Experimental Feature** - The app supports connecting to MCP servers to extend the AI's capabilities with external tools.
+
+### Supported MCP Servers
+
+- **GitHub**: Search repositories, issues, pull requests, and code
+- **SerpAPI**: Web search capabilities
+- **Custom MCP Servers**: Any MCP-compatible server
+
+### How to Use
+
+1. Click "Settings" in the top-right corner
+2. Scroll to the "MCP (Model Context Protocol)" section
+3. Click "+ Add MCP"
+4. Enter:
+   - **Name**: A friendly name (e.g., "Github")
+   - **Address**: The MCP server URL (e.g., `https://api.githubcopilot.com/mcp/`)
+   - **Credentials**: API key or token if required
+5. Click "Save Credentials"
+
+When MCP servers are configured, the AI will automatically use available tools when relevant. For example, if you ask about GitHub repositories, it will use GitHub MCP tools to fetch real-time information.
+
+> **Note**: MCP integration is experimental. Ensure your MCP server is accessible and properly configured.
 
 ## 🚢 Deployment
 

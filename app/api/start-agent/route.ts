@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       llmModel: userLlmModel,
       ttsApiKey: userTtsApiKey,
       ttsRegion: userTtsRegion,
+      mcps,
     } = await request.json();
 
     // Use credentials from request body (for live demo) or fall back to env vars (for development)
@@ -157,7 +158,9 @@ export async function POST(request: NextRequest) {
           params: {
             key: ttsApiKey,
             region: ttsRegion,
-            voice_name: "en-US-AndrewMultilingualNeural", // Natural-sounding male voice
+            // voice_name: "en-US-AndrewMultilingualNeural", // Natural-sounding male voice
+            // voice_name: "en-US-ShimmerTurboMultilingualNeural",
+            voice_name: "en-US-AlloyTurboMultilingualNeural",
           },
           // CRITICAL: skip_patterns: [2] tells TTS to skip Chinese square brackets 【】
           // This prevents the AI from reading 500 lines of HTML code aloud.
@@ -165,18 +168,53 @@ export async function POST(request: NextRequest) {
           skip_patterns: [2],
         },
         llm: (() => {
-          const systemPrompt =
-            "You are an expert web development AI assistant specializing in creating websites, web apps, and browser-based games. Keep spoken responses SHORT and concise.\n\nIMPORTANT: Only generate code when the user asks you to create, build, or modify something. For conversational questions (like \"How are you?\", \"What can you do?\"), just respond naturally WITHOUT generating any code.\n\nWhen you DO generate HTML/CSS/JS code, you MUST wrap it in CHINESE SQUARE BRACKETS like this:\n【<!DOCTYPE html><html>...</html>】\n\nThe Chinese square brackets 【】 are REQUIRED - they tell the system to render the code visually instead of speaking it.\n\nRULES:\n1. Code must be wrapped in Chinese square brackets: 【<!DOCTYPE html><html>...</html>】\n2. Put ONLY the raw HTML code inside 【】 - NO markdown code fences like ```html, NO explanatory text\n3. Start with <!DOCTYPE html> or <html immediately after the opening 【\n4. Text outside 【】 will be spoken aloud - KEEP IT BRIEF\n5. Code runs in an iframe - ensure it's responsive and standalone\n6. Use modern, clean design with good UX practices\n7. For images, use https://picsum.photos/ - Examples: https://picsum.photos/200/300 or https://picsum.photos/400 for square or https://picsum.photos/id/237/200/300 for specific image\n\nEXTERNAL SERVICES:\nYou can use CDN services when needed, but only if they add significant value:\n- jsDelivr (https://cdn.jsdelivr.net) - for libraries like jQuery, Bootstrap, etc.\n- Font Awesome (https://cdnjs.cloudflare.com/ajax/libs/font-awesome/) - for icons\n- Three.js (https://cdnjs.cloudflare.com/ajax/libs/three.js/) - for 3D graphics and games\n- Google Fonts (https://fonts.googleapis.com) - for typography\n- Chart.js, D3.js - for data visualization\n- Matter.js, Phaser - for physics and game engines\n- Other CDN services as appropriate\n\nIMPORTANT:\n- DO NOT use React, Next.js, Vue, Angular, or other frameworks that require build tools or server-side rendering. Code runs in a static iframe.\n- Only include external libraries if they're necessary for the requested feature. For simple websites/apps, prefer vanilla HTML/CSS/JS with inline styles and scripts.\n- All code must be client-side only and work in a static HTML file.\n\nSPEAKING STYLE: Be concise. Say only what's necessary. Avoid long explanations.\n\nCORRECT EXAMPLE:\nHere's a button 【<!DOCTYPE html><html><head><style>button{background:red;color:white;padding:20px;border:none;}</style></head><body><button onclick=\"alert('Hi!')\">Click Me</button></body></html>】 that shows an alert.\n\nWRONG EXAMPLE (with markdown fences):\n【```html\n<!DOCTYPE html>...\n```】\n\nALWAYS use raw HTML inside the brackets, never markdown fences. Without Chinese brackets 【】, the code will be spoken instead of rendered.";
+          const hasMcps = mcps && Array.isArray(mcps) && mcps.length > 0;
+
+          // Base system prompt
+          let systemPrompt =
+            "You are an expert web development AI assistant specializing in creating websites, web apps, and browser-based games. Keep spoken responses SHORT and concise.\n\nIMPORTANT: Only generate code when the user asks you to create, build, or modify something. For conversational questions (like \"How are you?\", \"What can you do?\"), just respond naturally WITHOUT generating any code.\n\nWhen you DO generate HTML/CSS/JS code, you MUST wrap it in CHINESE SQUARE BRACKETS like this:\n【<!DOCTYPE html><html>...</html>】\n\nThe Chinese square brackets 【】 are REQUIRED - they tell the system to render the code visually instead of speaking it.\n\nRULES:\n1. Code must be wrapped in Chinese square brackets: 【<!DOCTYPE html><html>...</html>】\n2. Put ONLY the raw HTML code inside 【】 - NO markdown code fences like ```html, NO explanatory text\n3. Start with <!DOCTYPE html> or <html immediately after the opening 【\n4. Text outside 【】 will be spoken aloud - KEEP IT BRIEF\n5. Code runs in an iframe - ensure it's responsive and standalone\n6. Use modern, clean design with good UX practices\n7. For images, use https://picsum.photos/ - Examples: https://picsum.photos/200/300 or https://picsum.photos/400 for square or https://picsum.photos/id/237/200/300 for specific image\n8. NEVER include any comments in the code - NO inline comments (//), NO multiline comments (/* */), NO HTML comments (<!-- -->). Generate clean code without any comments.\n9. NEVER speak or mention URLs in your spoken responses unless they are inside Chinese brackets 【】as part of the code. If you need to reference a URL, put it only in code inside 【】brackets, never in spoken text.\n\nEXTERNAL SERVICES:\nYou can use CDN services when needed, but only if they add significant value:\n- jsDelivr (https://cdn.jsdelivr.net) - for libraries like jQuery, Bootstrap, etc.\n- Font Awesome (https://cdnjs.cloudflare.com/ajax/libs/font-awesome/) - for icons\n- Three.js (https://cdnjs.cloudflare.com/ajax/libs/three.js/) - for 3D graphics and games\n- Google Fonts (https://fonts.googleapis.com) - for typography\n- Chart.js, D3.js - for data visualization\n- Matter.js, Phaser - for physics and game engines\n- Other CDN services as appropriate\n\nIMPORTANT:\n- DO NOT use React, Next.js, Vue, Angular, or other frameworks that require build tools or server-side rendering. Code runs in a static iframe.\n- Only include external libraries if they're necessary for the requested feature. For simple websites/apps, prefer vanilla HTML/CSS/JS with inline styles and scripts.\n- All code must be client-side only and work in a static HTML file.\n\nSPEAKING STYLE: Be concise. Say only what's necessary. Avoid long explanations.\n\nCORRECT EXAMPLE:\nHere's a button 【<!DOCTYPE html><html><head><style>button{background:red;color:white;padding:20px;border:none;}</style></head><body><button onclick=\"alert('Hi!')\">Click Me</button></body></html>】 that shows an alert.\n\nWRONG EXAMPLE (with markdown fences):\n【```html\n<!DOCTYPE html>...\n```】\n\nALWAYS use raw HTML inside the brackets, never markdown fences. Without Chinese brackets 【】, the code will be spoken instead of rendered.";
+
+          // Add information about available tools/MCPs if configured
+          if (hasMcps) {
+            const mcpNames = mcps
+              .map((mcp: any) => mcp.name || "Unknown")
+              .join(", ");
+            systemPrompt += `\n\nEXTERNAL TOOLS AVAILABLE:\nYou have access to external tools and services through integrated MCP (Model Context Protocol) connections: ${mcpNames}.\n\nIMPORTANT TOOL USAGE GUIDELINES:\n- When users ask questions that could be answered by your available tools, USE THEM AUTOMATICALLY\n- Don't wait for explicit permission - if a tool can provide better, real-time information, use it\n- Review the available tool descriptions to understand what each tool can do\n- Use tools proactively to provide accurate, up-to-date information rather than relying on your training data\n- If you're unsure about something that your tools can help with, USE THE TOOLS to find out\n\nBe proactive in using available tools to enhance your responses with real-time, accurate information.`;
+          }
+
+          // Build wrapper URL if MCPs are configured
+          let wrapperUrl: string | null = null;
+          if (hasMcps) {
+            const host =
+              request.headers.get("x-forwarded-host") ||
+              request.headers.get("host") ||
+              "localhost:3000";
+            const protocol =
+              request.headers.get("x-forwarded-proto") ||
+              (request.url.startsWith("https") ? "https" : "http");
+            const baseUrl = `${protocol}://${host}`;
+            const encodedLlmUrl = Buffer.from(llmUrl).toString("base64");
+            const encodedLlmApiKey = Buffer.from(llmApiKey).toString("base64");
+            const encodedMcps = Buffer.from(JSON.stringify(mcps)).toString(
+              "base64"
+            );
+            wrapperUrl = `${baseUrl}/api/llm-wrapper/chat/completions?llmUrl=${encodeURIComponent(
+              encodedLlmUrl
+            )}&llmApiKey=${encodeURIComponent(
+              encodedLlmApiKey
+            )}&mcps=${encodeURIComponent(encodedMcps)}`;
+          }
 
           // Gemini uses different format per Agora docs: https://docs.agora.io/en/conversational-ai/models/llm/gemini
           if (userLlmProvider === "gemini") {
-            // For Gemini: API key goes in URL, system_messages use parts array, need style: "gemini"
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${
+            const actualGeminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${
               userLlmModel || "gemini-3-flash-preview"
             }:streamGenerateContent?alt=sse&key=${llmApiKey}`;
 
+            const finalUrl = wrapperUrl || actualGeminiUrl;
+
             return {
-              url: geminiUrl,
+              url: finalUrl,
               system_messages: [
                 {
                   parts: [
@@ -199,9 +237,11 @@ export async function POST(request: NextRequest) {
             };
           } else {
             // OpenAI format (default)
+            const finalUrl = wrapperUrl || llmUrl;
+
             return {
-              url: llmUrl,
-              api_key: llmApiKey,
+              url: finalUrl,
+              api_key: wrapperUrl ? "" : llmApiKey,
               system_messages: [
                 {
                   role: "system",
@@ -215,7 +255,7 @@ export async function POST(request: NextRequest) {
                 "I'm having trouble processing that. Could you please try again?",
               params: {
                 model: userLlmModel || "gpt-4o-mini",
-                max_completion_tokens: 16384, // High value for longer code generation
+                max_completion_tokens: 16384,
               },
             };
           }

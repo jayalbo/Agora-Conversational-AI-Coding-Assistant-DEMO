@@ -12,6 +12,8 @@ export interface TranscriptionMessage {
   timestamp: number;
 }
 
+export type AgentStatus = "listening" | "speaking" | "idle" | "thinking" | "silent";
+
 /**
  * Wrapper class for Agora RTC + RTM integration.
  * 
@@ -39,6 +41,7 @@ export class AgoraConversationalClient {
   private botUid: number; // The AI agent's UID
   private onTranscription: ((message: TranscriptionMessage) => void) | null =
     null;
+  private onStatusChange: ((status: AgentStatus) => void) | null = null;
 
   constructor(
     appId: string,
@@ -56,6 +59,10 @@ export class AgoraConversationalClient {
 
   setTranscriptionCallback(callback: (message: TranscriptionMessage) => void) {
     this.onTranscription = callback;
+  }
+
+  setStatusCallback(callback: (status: AgentStatus) => void) {
+    this.onStatusChange = callback;
   }
 
   /**
@@ -217,6 +224,38 @@ export class AgoraConversationalClient {
       }
       console.log("======================\n");
 
+      // Listen for presence events (for agent state changes)
+      // According to Agora docs: https://docs.agora.io/en/conversational-ai/develop/event-notifications
+      // Agent state changes come through Signaling presence events
+      // States: silent, listening, thinking, speaking
+      // Event structure: { eventType: "REMOTE_STATE_CHANGED", publisher: botUid, stateChanged: { state: "..." } }
+      this.rtmClient.addEventListener("presence", (event: any) => {
+        console.log("\n👥 RTM PRESENCE EVENT:", JSON.stringify(event, null, 2));
+        
+        try {
+          // Check if this is a state change event for our agent
+          if (event.eventType === "REMOTE_STATE_CHANGED" && event.stateChanged) {
+            // Verify this is from our agent (botUid)
+            if (event.publisher === String(this.botUid) || event.publisher === this.botUid.toString()) {
+              const agentState = event.stateChanged.state;
+              
+              if (agentState && this.onStatusChange) {
+                console.log(`🤖 Agent presence state: ${agentState}`);
+                const normalizedStatus: AgentStatus = 
+                  agentState === "listening" || agentState === "LISTENING" ? "listening" :
+                  agentState === "speaking" || agentState === "SPEAKING" ? "speaking" :
+                  agentState === "thinking" || agentState === "THINKING" ? "thinking" :
+                  agentState === "silent" || agentState === "SILENT" ? "silent" :
+                  "silent";
+                this.onStatusChange(normalizedStatus);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("❌ Failed to parse RTM presence event:", err);
+        }
+      });
+
       // Listen for channel messages (transcriptions from the AI agent)
       this.rtmClient.addEventListener("message", (event: any) => {
         console.log("\n📨 RTM MESSAGE:", JSON.stringify(event, null, 2));
@@ -238,6 +277,28 @@ export class AgoraConversationalClient {
           }
 
           console.log("Parsed transcription data:", data);
+
+          // Handle agent status updates
+          // According to Agora docs: https://docs.agora.io/en/conversational-ai/develop/event-notifications
+          // Status changes come through Signaling presence events or status messages
+          // Possible states: silent, listening, thinking, speaking
+          if (data.object === "assistant.status" || data.object === "agent.status") {
+            const status = data.status || data.state || "silent";
+            console.log(`🤖 Agent status: ${status}`);
+            
+            // Normalize status values according to Agora documentation
+            const normalizedStatus: AgentStatus = 
+              status === "listening" || status === "LISTENING" ? "listening" :
+              status === "speaking" || status === "SPEAKING" ? "speaking" :
+              status === "thinking" || status === "THINKING" || status === "processing" ? "thinking" :
+              status === "silent" || status === "SILENT" || status === "idle" ? "silent" :
+              "silent";
+            
+            if (this.onStatusChange) {
+              this.onStatusChange(normalizedStatus);
+            }
+            // Continue to also check for transcription data in same message
+          }
 
           // Handle transcription messages from Conversational AI agent
           // Message structure:
@@ -288,6 +349,26 @@ export class AgoraConversationalClient {
                 isFinal: isFinal,
                 timestamp: Date.now(),
               });
+            }
+
+            // Infer status from transcription messages if status callback exists
+            // Only set active states from transcriptions - let explicit status events handle idle/silent
+            if (this.onStatusChange) {
+              if (isAgent) {
+                // Check if the message contains code (Chinese brackets) - means agent is thinking/generating
+                const hasCode = text.includes("【") || text.includes("】");
+                if (hasCode && !isFinal) {
+                  // Agent is generating code - show thinking status
+                  this.onStatusChange("thinking");
+                } else if (!isFinal) {
+                  // Agent is streaming speech (interim message)
+                  this.onStatusChange("speaking");
+                }
+                // Don't set to silent/idle on final messages - wait for explicit status events
+              } else {
+                // User is speaking, agent is listening
+                this.onStatusChange("listening");
+              }
             }
           }
         } catch (err) {

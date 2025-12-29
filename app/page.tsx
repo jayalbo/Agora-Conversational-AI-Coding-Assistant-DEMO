@@ -4,7 +4,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef } from "react";
-import type { AgoraConversationalClient as AgoraClientType } from "@/lib/agora-client";
+import type { AgoraConversationalClient as AgoraClientType, AgentStatus } from "@/lib/agora-client";
 import JSZip from "jszip";
 import {
   Mic,
@@ -27,6 +27,7 @@ interface TranscriptMessage {
   type: "user" | "agent";
   text: string;
   timestamp: Date;
+  isFinal: boolean;
 }
 
 interface CodeBlock {
@@ -111,6 +112,7 @@ export default function Home() {
   const [showDeviceSelector, setShowDeviceSelector] = useState(false);
   const [chatMessage, setChatMessage] = useState<string>("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>("silent");
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -362,6 +364,14 @@ export default function Home() {
       );
 
       /**
+       * Set up status callback to handle agent status updates.
+       */
+      client.setStatusCallback((status: AgentStatus) => {
+        console.log("Agent status changed:", status);
+        setAgentStatus(status);
+      });
+
+      /**
        * Set up transcription callback to handle incoming messages.
        *
        * This callback fires for BOTH interim and final messages:
@@ -413,10 +423,9 @@ export default function Home() {
           setIsGeneratingCode(false);
         }
 
-        // Only show FINAL spoken text in transcript (no code, no interim messages)
-        // This prevents the transcript from flickering with partial responses
-        // Also filter out system messages about code imports/loads
-        if (spokenText && message.isFinal) {
+        // Show both interim and final messages in transcript
+        // Update interim messages in real-time, then replace with final when it arrives
+        if (spokenText) {
           // Filter out code notification messages (they start with "Current code context")
           const isCodeNotification =
             spokenText.includes("Current code context") ||
@@ -424,15 +433,73 @@ export default function Home() {
             spokenText.includes("I've loaded new code");
 
           if (!isCodeNotification) {
-            setTranscript((prev) => [
-              ...prev,
-              {
-                id: `${Date.now()}-${Math.random()}`,
-                type: message.type,
-                text: spokenText, // Only the spoken part, no code blocks
-                timestamp: new Date(),
-              },
-            ]);
+            setTranscript((prev) => {
+              // If this is an interim message, find and replace the last interim message of the same type
+              // If this is a final message, find and replace the last interim message of the same type, or add it
+              
+              // Find the last interim message of the same type (search backwards)
+              let lastInterimIndex = -1;
+              for (let i = prev.length - 1; i >= 0; i--) {
+                if (prev[i].type === message.type && !prev[i].isFinal) {
+                  lastInterimIndex = i;
+                  break;
+                }
+              }
+              
+              if (!message.isFinal) {
+                // Interim message - replace existing interim or add new one
+                if (lastInterimIndex !== -1) {
+                  // Replace the existing interim message
+                  const updated = [...prev];
+                  updated[lastInterimIndex] = {
+                    id: updated[lastInterimIndex].id, // Keep the same ID
+                    type: message.type,
+                    text: spokenText,
+                    timestamp: new Date(),
+                    isFinal: false,
+                  };
+                  return updated;
+                } else {
+                  // No existing interim message, add new one
+                  return [
+                    ...prev,
+                    {
+                      id: `${Date.now()}-${Math.random()}`,
+                      type: message.type,
+                      text: spokenText,
+                      timestamp: new Date(),
+                      isFinal: false,
+                    },
+                  ];
+                }
+              } else {
+                // Final message - replace the last interim of the same type, or add it
+                if (lastInterimIndex !== -1) {
+                  // Replace the interim message with the final one
+                  const updated = [...prev];
+                  updated[lastInterimIndex] = {
+                    id: updated[lastInterimIndex].id, // Keep the same ID
+                    type: message.type,
+                    text: spokenText,
+                    timestamp: new Date(),
+                    isFinal: true,
+                  };
+                  return updated;
+                } else {
+                  // No interim message found, add the final one
+                  return [
+                    ...prev,
+                    {
+                      id: `${Date.now()}-${Math.random()}`,
+                      type: message.type,
+                      text: spokenText,
+                      timestamp: new Date(),
+                      isFinal: true,
+                    },
+                  ];
+                }
+              }
+            });
           }
         }
 
@@ -494,6 +561,7 @@ export default function Home() {
           llmModel: credentials.llmModel,
           ttsApiKey: credentials.ttsApiKey,
           ttsRegion: credentials.ttsRegion,
+          mcps: credentials.mcps,
         }),
       });
 
@@ -572,6 +640,7 @@ export default function Home() {
     setIsMicActive(false);
     setIsMuted(false);
     setIsGeneratingCode(false);
+    setAgentStatus("silent");
     setError("");
     setTranscript([]); // Clear conversation history
 
@@ -1488,9 +1557,32 @@ export default function Home() {
             className="lg:col-span-1 bg-slate-800/30 backdrop-blur rounded-lg p-3 sm:p-4 shadow-lg flex flex-col"
             style={{ height: "700px", maxHeight: "700px" }}
           >
-            <h2 className="text-base sm:text-lg font-semibold mb-3 text-slate-300 flex-shrink-0">
-              Chat
-            </h2>
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold text-slate-300">
+                Chat
+              </h2>
+              {isConnected && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800/50 border border-slate-700/50">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      agentStatus === "listening"
+                        ? "bg-green-500 animate-pulse"
+                        : agentStatus === "speaking"
+                        ? "bg-blue-500 animate-pulse"
+                        : agentStatus === "thinking"
+                        ? "bg-purple-500 animate-pulse"
+                        : "bg-slate-500"
+                    }`}
+                  />
+                  <span className="text-xs text-slate-300">
+                    {agentStatus === "listening" && "👂 Listening"}
+                    {agentStatus === "speaking" && "🗣️ Speaking"}
+                    {agentStatus === "thinking" && "🤔 Thinking"}
+                    {(agentStatus === "idle" || agentStatus === "silent") && "✅ Ready"}
+                  </span>
+                </div>
+              )}
+            </div>
             <div
               ref={transcriptContainerRef}
               className="space-y-2 flex-1 overflow-y-auto text-sm mb-3 min-h-0"
@@ -1502,28 +1594,42 @@ export default function Home() {
                     : "Connect to start chatting"}
                 </p>
               ) : (
-                transcript.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`p-2 rounded ${
-                      msg.type === "user"
-                        ? "bg-blue-600/20"
-                        : "bg-purple-600/20"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1 mb-1">
-                      <span className="text-xs font-medium text-slate-400">
-                        {msg.type === "user" ? "👤" : "🤖"}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {msg.timestamp.toLocaleTimeString()}
-                      </span>
+                transcript.map((msg, index) => {
+                  // Check if this is the last agent message and status is still speaking
+                  const isLastAgentMessage = 
+                    msg.type === "agent" && 
+                    (index === transcript.length - 1 || 
+                     transcript.slice(index + 1).every(m => m.type !== "agent"));
+                  const showSpinner = isLastAgentMessage && agentStatus === "speaking";
+                  
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`p-2 rounded ${
+                        msg.type === "user"
+                          ? "bg-blue-600/20"
+                          : "bg-purple-600/20"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="text-xs font-medium text-slate-400">
+                          {msg.type === "user" ? "👤" : "🤖"}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {msg.timestamp.toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
+                        {msg.text}
+                        {showSpinner && (
+                          <span className="inline-block ml-1.5">
+                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-slate-400 border-t-transparent inline-block align-middle"></div>
+                          </span>
+                        )}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
-                      {msg.text}
-                    </p>
-                  </div>
-                ))
+                  );
+                })
               )}
               <div ref={transcriptEndRef} />
             </div>

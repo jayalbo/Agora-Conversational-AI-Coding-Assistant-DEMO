@@ -5,6 +5,12 @@ import { X, Save, Settings, Eye, EyeOff } from "lucide-react";
 
 export type LLMProvider = "openai" | "gemini";
 
+export interface MCPConfig {
+  name: string;
+  address: string;
+  credentials?: string; // JSON string or API key
+}
+
 export interface UserCredentials {
   agoraAppId: string;
   agoraAppCertificate: string;
@@ -17,6 +23,7 @@ export interface UserCredentials {
   llmModel: string;
   ttsApiKey: string;
   ttsRegion: string;
+  mcps?: MCPConfig[]; // Array of MCP configurations
 }
 
 interface SettingsModalProps {
@@ -38,6 +45,7 @@ const defaultCredentials: UserCredentials = {
   llmModel: "gpt-4o-mini",
   ttsApiKey: "",
   ttsRegion: "westus",
+  mcps: [],
 };
 
 // Provider-specific configurations
@@ -81,6 +89,7 @@ export default function SettingsModal({
         ...initialCredentials,
         llmProvider: initialCredentials.llmProvider || "openai" as LLMProvider,
         llmModel: initialCredentials.llmModel || (initialCredentials.llmProvider === "gemini" ? "gemini-3-flash-preview" : "gpt-4o-mini"),
+        mcps: initialCredentials.mcps || [],
       };
       setCredentials(migratedCredentials);
     }
@@ -88,6 +97,31 @@ export default function SettingsModal({
 
   const toggleSecretVisibility = (field: string) => {
     setShowSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const addMCP = () => {
+    setCredentials((prev) => ({
+      ...prev,
+      mcps: [
+        ...(prev.mcps || []),
+        { name: "", address: "", credentials: "" },
+      ],
+    }));
+  };
+
+  const removeMCP = (index: number) => {
+    setCredentials((prev) => ({
+      ...prev,
+      mcps: (prev.mcps || []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateMCP = (index: number, field: keyof MCPConfig, value: string) => {
+    setCredentials((prev) => {
+      const updatedMcps = [...(prev.mcps || [])];
+      updatedMcps[index] = { ...updatedMcps[index], [field]: value };
+      return { ...prev, mcps: updatedMcps };
+    });
   };
 
   const validateCredentials = (): boolean => {
@@ -362,6 +396,86 @@ export default function SettingsModal({
               error={errors.ttsRegion}
               placeholder="westus"
             />
+          </div>
+
+          {/* MCP Configuration */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-yellow-300 flex items-center gap-2">
+                  <span>🔌</span> MCP (Model Context Protocol)
+                </h3>
+                <span className="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded">
+                  Experimental
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={addMCP}
+                className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition-colors"
+              >
+                + Add MCP
+              </button>
+            </div>
+            <p className="text-sm text-slate-400">
+              Configure MCP servers to provide additional context and tools to the LLM.
+              Use ngrok or similar for local MCP servers.
+            </p>
+
+            {(!credentials.mcps || credentials.mcps.length === 0) && (
+              <p className="text-sm text-slate-500 italic">
+                No MCPs configured. Add one to enable MCP integration.
+              </p>
+            )}
+
+            {credentials.mcps && credentials.mcps.length > 0 && (
+              <div className="space-y-4">
+                {credentials.mcps.map((mcp, index) => (
+                  <div
+                    key={index}
+                    className="p-4 bg-slate-900/50 border border-slate-700 rounded-lg space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium text-slate-300">
+                        MCP #{index + 1}
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => removeMCP(index)}
+                        className="px-2 py-1 text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <InputField
+                      label="Name"
+                      value={mcp.name}
+                      onChange={(value) => updateMCP(index, "name", value)}
+                      placeholder="My MCP Server"
+                    />
+
+                    <InputField
+                      label="Address (URL)"
+                      value={mcp.address}
+                      onChange={(value) => updateMCP(index, "address", value)}
+                      placeholder="https://your-mcp-server.ngrok.io"
+                    />
+
+                    <SecretInputField
+                      label="Credentials (Optional)"
+                      value={mcp.credentials || ""}
+                      onChange={(value) => updateMCP(index, "credentials", value)}
+                      placeholder="API key or JSON credentials"
+                      show={showSecrets[`mcp-${index}-credentials`] || false}
+                      onToggle={() =>
+                        toggleSecretVisibility(`mcp-${index}-credentials`)
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
