@@ -9,10 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.1",
+    "@ai-sdk/mcp": "^1.0.1",
+    "@ai-sdk/openai": "^3.0.1",
     "@types/js-beautify": "^1.14.3",
     "agora-rtc-sdk-ng": "^4.20.0",
     "agora-rtm-sdk": "^2.2.2",
     "agora-token": "^2.0.5",
+    "ai": "^6.0.3",
     "js-beautify": "^1.15.4",
     "jszip": "^3.10.1",
     "lucide-react": "^0.545.0",
