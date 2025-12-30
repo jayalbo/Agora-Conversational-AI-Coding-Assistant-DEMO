@@ -196,44 +196,44 @@ export default function SettingsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-theme-panel border border-theme rounded-lg shadow-theme-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-slate-800 border-b border-slate-700 p-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Settings className="w-6 h-6 text-purple-400" />
-            <h2 className="text-2xl font-bold text-white">Settings</h2>
+        <div className="sticky top-0 z-10 bg-theme-panel border-b border-theme p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-theme-accent" />
+            <h2 className="text-lg font-semibold text-theme-primary">Settings</h2>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors"
+            className="text-theme-tertiary hover:text-theme-primary transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm text-blue-200">
-            <p className="font-semibold mb-2">🔒 Your credentials stay private</p>
-            <p>
+        <div className="p-5 space-y-5">
+          <div className="bg-theme-secondary border border-theme rounded-lg p-3 text-sm text-theme-secondary">
+            <p className="font-medium mb-1.5 text-theme-primary">🔒 Your credentials stay private</p>
+            <p className="text-theme-secondary">
               All credentials are stored locally in your browser and sent directly
               to the respective APIs. They are never stored on our servers.
             </p>
           </div>
 
           {/* Agora Credentials */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-purple-300 flex items-center gap-2">
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold text-theme-primary flex items-center gap-2">
               <span>📡</span> Agora Credentials
             </h3>
-            <p className="text-sm text-slate-400">
+            <p className="text-xs text-theme-secondary">
               Get these from{" "}
               <a
                 href="https://console.agora.io/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
+                className="text-theme-accent hover:text-theme-accent-hover transition-colors"
               >
                 Agora Console
               </a>
@@ -286,8 +286,8 @@ export default function SettingsModal({
           </div>
 
           {/* LLM Credentials */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-green-300 flex items-center gap-2">
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold text-theme-primary flex items-center gap-2">
               <span>🤖</span> LLM Configuration
             </h3>
             
@@ -299,7 +299,7 @@ export default function SettingsModal({
               <select
                 value={credentials.llmProvider}
                 onChange={(e) => handleChange("llmProvider", e.target.value)}
-                className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-purple-500 transition-colors"
+                className="w-full px-3 py-2 bg-theme-secondary border border-theme rounded text-theme-primary focus:outline-none focus:border-theme-accent focus:ring-2 focus:ring-theme-accent focus:ring-opacity-20 transition-colors text-sm"
               >
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Google Gemini</option>
@@ -312,7 +312,7 @@ export default function SettingsModal({
                 href={LLM_PROVIDERS[credentials.llmProvider].apiKeyLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
+                className="text-theme-accent hover:text-theme-accent-hover transition-colors"
               >
                 {LLM_PROVIDERS[credentials.llmProvider].apiKeyLinkText}
               </a>
@@ -342,10 +342,10 @@ export default function SettingsModal({
             )}
 
             {credentials.llmProvider === "gemini" && (
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm text-blue-200">
+              <div className="bg-theme-secondary border border-theme rounded-lg p-3 text-xs text-theme-secondary">
                 <p>
-                  <strong>Note:</strong> For Gemini, the API key will be automatically added to the URL.
-                  URL format: <code className="bg-slate-800 px-1 rounded text-xs">https://generativelanguage.googleapis.com/v1beta/models/{credentials.llmModel}:streamGenerateContent?alt=sse&key=YOUR_API_KEY</code>
+                  <strong className="text-theme-primary">Note:</strong> For Gemini, the API key will be automatically added to the URL.
+                  URL format: <code className="bg-theme-tertiary px-1 rounded text-xs font-mono text-theme-primary">https://generativelanguage.googleapis.com/v1beta/models/{credentials.llmModel}:streamGenerateContent?alt=sse&key=YOUR_API_KEY</code>
                 </p>
               </div>
             )}
@@ -362,17 +362,17 @@ export default function SettingsModal({
           </div>
 
           {/* TTS Credentials */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-orange-300 flex items-center gap-2">
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold text-theme-primary flex items-center gap-2">
               <span>🔊</span> TTS Configuration
             </h3>
-            <p className="text-sm text-slate-400">
+            <p className="text-xs text-theme-secondary">
               Get API key from{" "}
               <a
                 href="https://portal.azure.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
+                className="text-theme-accent hover:text-theme-accent-hover transition-colors"
               >
                 Azure Portal
               </a>{" "}
@@ -399,50 +399,50 @@ export default function SettingsModal({
           </div>
 
           {/* MCP Configuration */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold text-yellow-300 flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-semibold text-theme-primary flex items-center gap-2">
                   <span>🔌</span> MCP (Model Context Protocol)
                 </h3>
-                <span className="px-2 py-0.5 text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded">
+                <span className="px-2 py-0.5 text-xs font-medium bg-theme-secondary text-theme-secondary border border-theme rounded">
                   Experimental
                 </span>
               </div>
               <button
                 type="button"
                 onClick={addMCP}
-                className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition-colors"
+                className="px-2.5 py-1 text-xs bg-theme-secondary hover:bg-theme-hover border border-theme rounded text-theme-primary transition-colors"
               >
                 + Add MCP
               </button>
             </div>
-            <p className="text-sm text-slate-400">
+            <p className="text-xs text-theme-secondary">
               Configure MCP servers to provide additional context and tools to the LLM.
               Use ngrok or similar for local MCP servers.
             </p>
 
             {(!credentials.mcps || credentials.mcps.length === 0) && (
-              <p className="text-sm text-slate-500 italic">
+              <p className="text-xs text-theme-tertiary italic">
                 No MCPs configured. Add one to enable MCP integration.
               </p>
             )}
 
             {credentials.mcps && credentials.mcps.length > 0 && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {credentials.mcps.map((mcp, index) => (
                   <div
                     key={index}
-                    className="p-4 bg-slate-900/50 border border-slate-700 rounded-lg space-y-3"
+                    className="p-3 bg-theme-secondary border border-theme rounded space-y-2"
                   >
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium text-slate-300">
+                      <h4 className="text-sm font-medium text-theme-primary">
                         MCP #{index + 1}
                       </h4>
                       <button
                         type="button"
                         onClick={() => removeMCP(index)}
-                        className="px-2 py-1 text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded transition-colors"
+                        className="px-2 py-1 text-xs bg-theme-secondary hover:bg-theme-hover border border-theme text-theme-primary rounded transition-colors"
                       >
                         Remove
                       </button>
@@ -480,16 +480,16 @@ export default function SettingsModal({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 z-10 bg-slate-800 border-t border-slate-700 p-6 flex items-center justify-between">
+        <div className="sticky bottom-0 z-10 bg-theme-panel border-t border-theme p-4 flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
+            className="px-3 py-1.5 text-sm text-theme-secondary hover:text-theme-primary transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-6 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-lg font-semibold transition-all flex items-center gap-2"
+            className="px-4 py-1.5 bg-theme-accent hover:bg-theme-accent-hover border border-theme-accent rounded text-sm font-medium transition-colors flex items-center gap-2 text-white"
           >
             <Save className="w-4 h-4" />
             Save Credentials
@@ -518,7 +518,7 @@ function InputField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-300 mb-2">
+      <label className="block text-xs font-medium text-theme-primary mb-1.5">
         {label}
       </label>
       <input
@@ -526,11 +526,11 @@ function InputField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full px-4 py-2 bg-slate-900 border ${
-          error ? "border-red-500" : "border-slate-700"
-        } rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors`}
+        className={`w-full px-3 py-2 bg-theme-secondary border ${
+          error ? "border-red-500" : "border-theme"
+        } rounded text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-theme-accent focus:ring-2 focus:ring-theme-accent focus:ring-opacity-20 transition-colors text-sm`}
       />
-      {error && <p className="mt-1 text-sm text-red-400">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -554,7 +554,7 @@ function SecretInputField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-300 mb-2">
+      <label className="block text-xs font-medium text-theme-primary mb-1.5">
         {label}
       </label>
       <div className="relative">
@@ -563,19 +563,19 @@ function SecretInputField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`w-full px-4 py-2 pr-12 bg-slate-900 border ${
-            error ? "border-red-500" : "border-slate-700"
-          } rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors`}
+          className={`w-full px-3 py-2 pr-10 bg-theme-secondary border ${
+            error ? "border-red-500" : "border-theme"
+          } rounded text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-theme-accent focus:ring-2 focus:ring-theme-accent focus:ring-opacity-20 transition-colors text-sm`}
         />
         <button
           type="button"
           onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors z-0"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-theme-tertiary hover:text-theme-primary transition-colors z-0"
         >
-          {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </button>
       </div>
-      {error && <p className="mt-1 text-sm text-red-400">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }

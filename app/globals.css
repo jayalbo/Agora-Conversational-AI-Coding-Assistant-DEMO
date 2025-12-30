@@ -2,33 +2,139 @@
 @tailwind components;
 @tailwind utilities;
 
+/* VS Code-inspired theme variables */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* Light theme */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-tertiary: #e7ebf0;
+  --bg-panel: #ffffff;
+  --bg-hover: #f0f0f0;
+  --bg-active: #e8e8e8;
+  --border-color: #d0d7de;
+  --border-hover: #b1bac4;
+  --text-primary: #24292f;
+  --text-secondary: #57606a;
+  --text-tertiary: #8b949e;
+  --accent: #0969da;
+  --accent-hover: #0860ca;
+  --shadow-sm: rgba(0, 0, 0, 0.05);
+  --shadow-md: rgba(0, 0, 0, 0.1);
+  --shadow-lg: rgba(0, 0, 0, 0.15);
+  
+  /* Subtle gradient for backgrounds */
+  --gradient-start: #fafbfc;
+  --gradient-end: #f6f8fa;
+  
+  /* CodeByVoice gradient - darker for light mode */
+  --gradient-codebyvoice-start: #0088cc;
+  --gradient-codebyvoice-mid: #0066aa;
+  --gradient-codebyvoice-end: #7c3aed;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+.dark {
+  /* Dark theme (VS Code Dark+) */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d30;
+  --bg-panel: #252526;
+  --bg-hover: #2a2d2e;
+  --bg-active: #37373d;
+  --border-color: #3e3e42;
+  --border-hover: #505050;
+  --text-primary: #cccccc;
+  --text-secondary: #9cdcfe;
+  --text-tertiary: #858585;
+  --accent: #007acc;
+  --accent-hover: #1a8cd8;
+  --shadow-sm: rgba(0, 0, 0, 0.3);
+  --shadow-md: rgba(0, 0, 0, 0.5);
+  --shadow-lg: rgba(0, 0, 0, 0.7);
+  
+  /* Subtle gradient for backgrounds */
+  --gradient-start: #1e1e1e;
+  --gradient-end: #252526;
+  
+  /* CodeByVoice gradient - brighter for dark mode */
+  --gradient-codebyvoice-start: #00c2ff;
+  --gradient-codebyvoice-mid: #a0faff;
+  --gradient-codebyvoice-end: #c46ffb;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+  
+  /* Theme-aware utility classes */
+  .bg-theme-primary {
+    background-color: var(--bg-primary);
+  }
+  
+  .bg-theme-secondary {
+    background-color: var(--bg-secondary);
+  }
+  
+  .bg-theme-tertiary {
+    background-color: var(--bg-tertiary);
+  }
+  
+  .bg-theme-panel {
+    background-color: var(--bg-panel);
+  }
+  
+  .bg-theme-hover:hover {
+    background-color: var(--bg-hover);
+  }
+  
+  .border-theme {
+    border-color: var(--border-color);
+  }
+  
+  .border-theme-hover:hover {
+    border-color: var(--border-hover);
+  }
+  
+  .text-theme-primary {
+    color: var(--text-primary);
+  }
+  
+  .text-theme-secondary {
+    color: var(--text-secondary);
+  }
+  
+  .text-theme-tertiary {
+    color: var(--text-tertiary);
+  }
+  
+  .text-theme-accent {
+    color: var(--accent);
+  }
+  
+  .bg-theme-accent {
+    background-color: var(--accent);
+  }
+  
+  .bg-theme-accent-hover:hover {
+    background-color: var(--accent-hover);
+  }
+  
+  .shadow-theme-sm {
+    box-shadow: 0 1px 3px var(--shadow-sm);
+  }
+  
+  .shadow-theme-md {
+    box-shadow: 0 4px 6px var(--shadow-md);
+  }
+  
+  .shadow-theme-lg {
+    box-shadow: 0 10px 15px var(--shadow-lg);
   }
 }
 
@@ -36,11 +142,21 @@ body {
 .shiki-wrapper pre {
   margin: 0 !important;
   padding: 1rem !important;
-  background: #0d1117 !important;
   overflow-x: auto;
 }
 
 .shiki-wrapper code {
   background: transparent !important;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+/* Ensure select options have good contrast in both themes */
+select {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+}
+
+select option {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }

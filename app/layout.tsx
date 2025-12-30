@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Agora Conversational AI Demo",
-  description: "Talk to AI and see code generated in real-time",
+  title: "CodeByVoice - Voice-First Coding Assistant",
+  description: "Build web applications with your voice. A voice-first coding assistant that turns your spoken ideas into working code in real-time.",
 };
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );

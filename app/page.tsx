@@ -16,6 +16,11 @@ import {
   Upload,
   Link as LinkIcon,
   Send,
+  Moon,
+  Sun,
+  Eye,
+  Code,
+  X,
 } from "lucide-react";
 import SettingsModal, {
   type UserCredentials,
@@ -113,13 +118,33 @@ export default function Home() {
   const [chatMessage, setChatMessage] = useState<string>("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("silent");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [panelWidth, setPanelWidth] = useState(80); // Percentage for preview panel
+  const [isResizing, setIsResizing] = useState(false);
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  const panelContainerRef = useRef<HTMLDivElement>(null);
 
   // Load credentials from localStorage on mount
   useEffect(() => {
+    // Load theme preference - apply immediately to prevent flash
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.className = initialTheme;
+      setTheme(initialTheme);
+      
+      // Load saved panel width
+      const savedWidth = localStorage.getItem("panelWidth");
+      if (savedWidth) {
+        setPanelWidth(parseFloat(savedWidth));
+      }
+    }
+
     const savedCredentials = localStorage.getItem("agoraCredentials");
     if (savedCredentials) {
       try {
@@ -155,6 +180,106 @@ export default function Home() {
     // Enumerate microphone devices
     loadMicrophoneDevices();
   }, []);
+
+  // Apply theme to document when it changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      document.documentElement.className = theme;
+      localStorage.setItem("theme", theme);
+    }
+  }, [theme]);
+
+  // Check if we're on a large screen
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsLargeScreen(window.innerWidth >= 1024);
+    };
+    
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
+
+  // Toggle theme function
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
+
+  // Panel resize handlers
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+    
+    let animationFrameId: number | null = null;
+    let lastWidth = panelWidth;
+    
+    // Disable pointer events on preview panel content during resize to prevent interference
+    const previewPanel = document.querySelector('.preview-panel') as HTMLElement;
+    if (previewPanel) {
+      previewPanel.style.pointerEvents = 'none';
+    }
+    
+    const handleResizeMove = (e: MouseEvent) => {
+      if (!panelContainerRef.current) return;
+      
+      // Use requestAnimationFrame to throttle updates and prevent breaking during fast drags
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      
+      animationFrameId = requestAnimationFrame(() => {
+        if (!panelContainerRef.current) return;
+        
+        const rect = panelContainerRef.current.getBoundingClientRect();
+        const newWidth = ((e.clientX - rect.left) / rect.width) * 100;
+        
+        // Constrain between 40% and 85% for preview panel (more conservative to prevent breaking)
+        // Also ensure chat panel doesn't get too narrow (minimum 250px = ~20% on typical screens)
+        const maxPreviewWidth = rect.width > 1250 ? 85 : 80; // Allow more room for chat on smaller screens
+        const constrainedWidth = Math.max(40, Math.min(maxPreviewWidth, newWidth));
+        
+        // Only update if the change is significant to reduce unnecessary re-renders
+        if (Math.abs(constrainedWidth - lastWidth) > 0.5) {
+          lastWidth = constrainedWidth;
+          setPanelWidth(constrainedWidth);
+        }
+      });
+    };
+
+    const handleResizeEnd = (e: MouseEvent) => {
+      e.preventDefault();
+      setIsResizing(false);
+      // Re-enable pointer events on preview panel
+      if (previewPanel) {
+        previewPanel.style.pointerEvents = '';
+      }
+      // Save final width to localStorage
+      localStorage.setItem("panelWidth", panelWidth.toString());
+    };
+
+    document.addEventListener("mousemove", handleResizeMove);
+    document.addEventListener("mouseup", handleResizeEnd);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      document.removeEventListener("mousemove", handleResizeMove);
+      document.removeEventListener("mouseup", handleResizeEnd);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      // Re-enable pointer events on preview panel in case cleanup happens during resize
+      if (previewPanel) {
+        previewPanel.style.pointerEvents = '';
+      }
+    };
+  }, [isResizing, panelWidth]);
 
   // Load available microphone devices
   const loadMicrophoneDevices = async () => {
@@ -974,20 +1099,25 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 text-white">
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8">
-        <header className="mb-6">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <img
-                src="/convoai-logo.png"
-                alt="ConvoAI"
-                className="h-5 sm:h-6 md:h-7"
-              />
-              <span className="text-gray-400 text-xs sm:text-sm">by</span>
+    <div className="min-h-screen bg-theme-primary text-theme-primary transition-colors duration-300">
+      {/* VS Code-like minimal top bar */}
+      <header className="border-b border-theme bg-theme-secondary px-4 py-2 flex items-center justify-between shadow-theme-sm">
+        <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+          <h1 
+            className="text-xl sm:text-2xl font-bold tracking-tight bg-clip-text text-transparent font-sans whitespace-nowrap"
+            style={{
+              backgroundImage: 'linear-gradient(90deg, var(--gradient-codebyvoice-start) 0%, var(--gradient-codebyvoice-mid) 33%, var(--gradient-codebyvoice-end) 100%)',
+            }}
+          >
+            CodeByVoice
+          </h1>
+          <div className="hidden sm:flex items-baseline gap-1.5 flex-shrink-0">
+            <span className="text-theme-secondary text-xs">by</span>
+            <span className="inline-flex items-baseline">
               <svg
                 viewBox="0 0 399.34668 137.06667"
-                className="h-2.5 sm:h-3 md:h-3.5 text-gray-400 transition-all duration-300 hover:scale-105 hover:brightness-110 hover:text-[#34b7ee] translate-y-0.5"
+                className="h-3 text-theme-secondary transition-colors hover:text-theme-accent"
+                style={{ transform: 'translateY(5px)' }}
                 role="img"
                 aria-label="Agora"
                 xmlns="http://www.w3.org/2000/svg"
@@ -1023,58 +1153,63 @@ export default function Home() {
                   transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
                 ></path>
               </svg>
+            </span>
+            <span className="text-theme-secondary text-xs">Conversational AI</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {!credentialsConfigured && (
+            <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 px-2 py-1 rounded text-xs flex items-center gap-1">
+              <span>⚠️</span>
+              <span className="hidden sm:inline">Configure credentials</span>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full lg:w-auto">
-              <div className="text-left sm:text-right">
-                <h1 className="text-lg sm:text-xl md:text-2xl font-bold">
-                  🎯 AI Coding Assistant
-                </h1>
-                <p className="text-slate-400 text-xs sm:text-sm">
-                  Real-time voice interaction with live code preview
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {!credentialsConfigured && (
-                  <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 px-3 py-1 rounded-lg text-xs flex items-center gap-2">
-                    <span>⚠️</span>
-                    <span>Configure credentials first</span>
-                  </div>
-                )}
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-600/50 border border-slate-600 rounded-lg transition-all text-sm"
-                  title="Settings"
-                >
-                  <Settings className="w-4 h-4" />
-                  <span className="hidden sm:inline">Settings</span>
-                </button>
-                {!isConnected ? (
-                  <button
-                    onClick={handleConnect}
-                    disabled={isConnecting || !credentialsConfigured}
-                    className="px-4 sm:px-5 md:px-6 py-2 sm:py-3 rounded-lg font-semibold transition whitespace-nowrap text-sm sm:text-base text-black hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(270deg, #00c2ff, #a0faff 33%, #fcf9f8 66%, #c46ffb)",
-                    }}
-                  >
-                    {isConnecting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
-                        <span>Connecting...</span>
-                      </>
-                    ) : (
-                      "Start Session"
-                    )}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          )}
+          
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded hover:bg-theme-hover transition-colors text-theme-secondary hover:text-theme-primary"
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+          </button>
+          
+          <button
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded hover:bg-theme-hover transition-colors text-sm text-theme-secondary hover:text-theme-primary"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+          {!isConnected ? (
+            <button
+              onClick={handleConnect}
+              disabled={isConnecting || !credentialsConfigured}
+              className="px-4 py-1.5 rounded bg-theme-accent hover:bg-theme-accent-hover text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isConnecting ? (
+                <>
+                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                  <span>Connecting...</span>
+                </>
+              ) : (
+                "Start Session"
+              )}
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
                     {/* Device Selector - Subtle dropdown */}
                     {isConnected && microphoneDevices.length > 1 && (
                       <select
                         value={selectedMicrophoneId}
                         onChange={(e) => handleDeviceChange(e.target.value)}
-                        className="bg-slate-800/30 border border-slate-700/50 rounded-md px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-slate-600 transition-colors max-w-[120px] sm:max-w-[140px] opacity-70 hover:opacity-100"
+                        className="bg-theme-secondary border border-theme rounded-md px-2 py-1 text-xs text-theme-primary focus:outline-none focus:border-theme-accent transition-colors max-w-[120px] sm:max-w-[140px] opacity-70 hover:opacity-100"
                         title="Select microphone"
                       >
                         {microphoneDevices.map((device) => (
@@ -1107,19 +1242,18 @@ export default function Home() {
 
                     <button
                       onClick={handleDisconnect}
-                      className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-slate-700/50 hover:bg-red-500/20 border border-slate-600 hover:border-red-500/50 rounded-full transition-all duration-200 hover:scale-105 text-xs sm:text-sm font-medium"
+                      className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-theme-secondary hover:bg-red-500/20 border border-theme hover:border-red-500/50 rounded-full transition-all duration-200 hover:scale-105 text-xs sm:text-sm font-medium"
                       title="End session"
                     >
-                      <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300" />
-                      <span className="text-slate-300">End</span>
+                      <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-theme-secondary" />
+                      <span className="text-theme-secondary">End</span>
                     </button>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
         </header>
 
+        <div className="container mx-auto px-4 py-4">
         {/* Settings Modal */}
         <SettingsModal
           isOpen={showSettings}
@@ -1130,42 +1264,42 @@ export default function Home() {
 
         {/* Share Success Modal */}
         {shareUrl && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-6 relative">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-theme-panel border border-theme rounded-lg shadow-theme-lg max-w-md w-full p-5 relative">
               <button
                 onClick={() => setShareUrl(null)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white"
+                className="absolute top-4 right-4 text-theme-tertiary hover:text-theme-primary transition-colors"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
 
               <div className="text-center mb-4">
-                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <span className="text-3xl">✅</span>
+                <div className="w-12 h-12 bg-theme-secondary border border-theme rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-2xl">✅</span>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">
+                <h3 className="text-base font-semibold text-theme-primary mb-1.5">
                   Link Copied!
                 </h3>
-                <p className="text-slate-400 text-sm">
+                <p className="text-xs text-theme-secondary">
                   Share this link with anyone to view your generated code
                 </p>
               </div>
 
               <div className="mb-4 relative">
-                <p className="text-xs text-slate-400 mb-1.5 flex items-center gap-1">
+                <p className="text-xs text-theme-secondary mb-1.5 flex items-center gap-1">
                   <span>📋</span>
                   Click URL to copy:
                 </p>
                 <div className="relative">
                   <div
                     onClick={handleCopyShareUrl}
-                    className="bg-slate-900 rounded-lg p-3 break-all text-sm text-slate-300 font-mono cursor-pointer hover:bg-slate-800 transition-colors border border-slate-700 hover:border-slate-600"
+                    className="bg-theme-secondary border border-theme rounded p-3 break-all text-xs text-theme-primary font-mono cursor-pointer hover:bg-theme-hover transition-colors"
                     title="Click to copy to clipboard"
                   >
                     {shareUrl}
                   </div>
                   {shareUrlCopied && (
-                    <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap z-10 opacity-100 transition-opacity duration-300">
+                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-theme-accent text-white text-xs px-2.5 py-1 rounded shadow-theme-md whitespace-nowrap z-10">
                       ✓ Copied!
                     </div>
                   )}
@@ -1178,7 +1312,7 @@ export default function Home() {
         {/* Load/Import Code Modal */}
         {showLoadImportModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl shadow-2xl max-w-2xl w-full p-6 relative max-h-[90vh] flex flex-col">
+            <div className="bg-theme-panel border border-theme rounded-lg shadow-theme-lg max-w-2xl w-full p-5 relative max-h-[90vh] flex flex-col">
               <button
                 onClick={() => {
                   setShowLoadImportModal(false);
@@ -1187,34 +1321,34 @@ export default function Home() {
                   setImportText("");
                   setImportError(null);
                 }}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white z-10"
+                className="absolute top-4 right-4 text-theme-tertiary hover:text-theme-primary transition-colors z-10"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
 
               <div className="mb-4">
-                <h3 className="text-xl font-bold text-white mb-4">
+                <h3 className="text-base font-semibold text-theme-primary mb-4">
                   Import or Load Code
                 </h3>
 
                 {/* Tabs */}
-                <div className="flex gap-2 mb-4 border-b border-slate-700">
+                <div className="flex gap-2 mb-4 border-b border-theme">
                   <button
                     onClick={() => setLoadImportTab("import")}
-                    className={`px-4 py-2 font-semibold transition ${
+                    className={`px-3 py-2 text-sm font-medium transition ${
                       loadImportTab === "import"
-                        ? "text-cyan-400 border-b-2 border-cyan-400"
-                        : "text-slate-400 hover:text-slate-300"
+                        ? "text-theme-accent border-b-2 border-theme-accent"
+                        : "text-theme-secondary hover:text-theme-primary"
                     }`}
                   >
                     Import
                   </button>
                   <button
                     onClick={() => setLoadImportTab("load")}
-                    className={`px-4 py-2 font-semibold transition ${
+                    className={`px-3 py-2 text-sm font-medium transition ${
                       loadImportTab === "load"
-                        ? "text-blue-400 border-b-2 border-blue-400"
-                        : "text-slate-400 hover:text-slate-300"
+                        ? "text-theme-accent border-b-2 border-theme-accent"
+                        : "text-theme-secondary hover:text-theme-primary"
                     }`}
                   >
                     Load from URL
@@ -1224,19 +1358,19 @@ export default function Home() {
                 {/* Import Tab */}
                 {loadImportTab === "import" && (
                   <div>
-                    <p className="text-slate-400 text-sm mb-4">
+                    <p className="text-xs text-theme-secondary mb-4">
                       Paste your code below or upload a file
                     </p>
 
                     <div className="mb-3">
-                      <label className="block text-sm text-slate-300 mb-2">
+                      <label className="block text-xs text-theme-primary mb-1.5">
                         Upload File (HTML, TXT, etc.)
                       </label>
                       <input
                         type="file"
                         accept=".html,.htm,.txt,.js,.css"
                         onChange={handleFileImport}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                        className="w-full bg-theme-secondary border border-theme rounded px-3 py-2 text-theme-primary text-xs file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-medium file:bg-theme-accent file:text-white hover:file:bg-theme-accent-hover"
                       />
                     </div>
 
@@ -1244,18 +1378,18 @@ export default function Home() {
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
                       placeholder="Paste your code here..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm h-64 resize-none"
+                      className="w-full bg-theme-secondary border border-theme rounded-lg px-4 py-3 text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-theme-accent focus:ring-2 focus:ring-theme-accent focus:ring-opacity-20 font-mono text-sm h-64 resize-none"
                     />
 
                     {importError && (
-                      <p className="text-red-400 text-sm mt-2">{importError}</p>
+                      <p className="text-red-500 text-xs mt-2">{importError}</p>
                     )}
 
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={handleImportCode}
                         disabled={!importText.trim()}
-                        className="flex-1 bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="flex-1 bg-theme-accent hover:bg-theme-accent-hover border border-theme-accent px-3 py-1.5 rounded text-sm font-medium transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-white"
                       >
                         <Upload className="w-4 h-4" />
                         <span>Import</span>
@@ -1266,7 +1400,7 @@ export default function Home() {
                           setImportText("");
                           setImportError(null);
                         }}
-                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
+                        className="px-3 py-1.5 bg-theme-secondary hover:bg-theme-hover border border-theme rounded text-sm font-medium transition text-theme-primary"
                       >
                         Cancel
                       </button>
@@ -1277,7 +1411,7 @@ export default function Home() {
                 {/* Load from URL Tab */}
                 {loadImportTab === "load" && (
                   <div>
-                    <p className="text-slate-400 text-sm mb-4">
+                    <p className="text-xs text-theme-secondary mb-4">
                       Enter a share URL (paste.fyi or your share link) to load
                       existing code
                     </p>
@@ -1287,7 +1421,7 @@ export default function Home() {
                       value={loadUrl}
                       onChange={(e) => setLoadUrl(e.target.value)}
                       placeholder="https://paste.fyi/XXXXX or https://yoursite.com/view/XXXXX"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2"
+                      className="w-full bg-theme-secondary border border-theme rounded-lg px-4 py-2 text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-theme-accent focus:ring-2 focus:ring-theme-accent focus:ring-opacity-20 mb-2"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           handleLoadFromUrl();
@@ -1296,14 +1430,14 @@ export default function Home() {
                     />
 
                     {loadError && (
-                      <p className="text-red-400 text-sm mb-2">{loadError}</p>
+                      <p className="text-red-500 text-xs mb-2">{loadError}</p>
                     )}
 
                     <div className="flex gap-2">
                       <button
                         onClick={handleLoadFromUrl}
                         disabled={isLoading}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="flex-1 bg-theme-accent hover:bg-theme-accent-hover border border-theme-accent px-3 py-1.5 rounded text-sm font-medium transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-white"
                       >
                         {isLoading ? (
                           <>
@@ -1323,7 +1457,7 @@ export default function Home() {
                           setLoadUrl("");
                           setLoadError(null);
                         }}
-                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
+                        className="px-3 py-1.5 bg-theme-secondary hover:bg-theme-hover border border-theme rounded text-sm font-medium transition text-theme-primary"
                       >
                         Cancel
                       </button>
@@ -1360,14 +1494,19 @@ export default function Home() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
+        <div ref={panelContainerRef} className="panel-container flex flex-col lg:flex-row gap-4 lg:gap-0" style={{ minHeight: "calc(100vh - 120px)" }}>
           {/* Code View Panel - Larger */}
           <div
-            className="lg:col-span-4 bg-slate-800/50 backdrop-blur rounded-lg p-4 sm:p-6 shadow-xl flex flex-col"
-            style={{ minHeight: "700px" }}
+            className="preview-panel bg-theme-panel border border-theme rounded-l-lg lg:rounded-r-none rounded-lg lg:rounded-lg p-4 shadow-theme-md flex flex-col"
+            style={{ 
+              height: isLargeScreen ? "calc(100vh - 120px)" : "calc(100vh - 120px)",
+              minHeight: "calc(100vh - 120px)",
+              width: isLargeScreen ? `${panelWidth}%` : "100%",
+              flexShrink: 0
+            }}
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3 sm:gap-0 flex-shrink-0">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-200">
+              <h2 className="text-base font-semibold text-theme-primary">
                 {showSourceCode ? "Source Code" : "Preview"}
               </h2>
               <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
@@ -1386,7 +1525,7 @@ export default function Home() {
                           setCurrentCode(codeBlocks[idx].html);
                         }
                       }}
-                      className="bg-slate-700 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm border border-slate-600 focus:outline-none focus:border-purple-500"
+                      className="bg-theme-secondary text-theme-primary px-2 sm:px-3 py-1 rounded text-xs sm:text-sm border border-theme focus:outline-none focus:border-theme-accent focus:ring-2 focus:ring-theme-accent focus:ring-opacity-20"
                     >
                       {codeBlocks.map((block, idx) => (
                         <option key={block.id} value={idx}>
@@ -1397,36 +1536,35 @@ export default function Home() {
                     </select>
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    setShowLoadImportModal(true);
-                    setLoadImportTab("import");
-                  }}
-                  disabled={!isConnected}
-                  className="bg-cyan-600 hover:bg-cyan-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={
-                    isConnected
-                      ? "Import or load code"
-                      : "Start session first to import code"
-                  }
-                >
-                  <Upload className="w-4 h-4" />
-                  <span className="hidden sm:inline">Import</span>
-                </button>
+                {isConnected && (
+                  <button
+                    onClick={() => {
+                      setShowLoadImportModal(true);
+                      setLoadImportTab("import");
+                    }}
+                    className="bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary"
+                    title="Import or load code"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Import</span>
+                  </button>
+                )}
                 {currentCode && (
                   <>
                     <button
                       onClick={() => setShowSourceCode(!showSourceCode)}
-                      className="bg-blue-600 hover:bg-blue-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2"
+                      className="bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary"
+                      title={showSourceCode ? "Switch to preview" : "Switch to code"}
                     >
                       {showSourceCode ? (
                         <>
-                          <span>👁️</span>{" "}
+                          <Eye className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">Preview</span>
                         </>
                       ) : (
                         <>
-                          <span>{"</>"}</span>
+                          <Code className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Code</span>
                         </>
                       )}
                     </button>
@@ -1450,26 +1588,26 @@ export default function Home() {
                         a.click();
                         URL.revokeObjectURL(url);
                       }}
-                      className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2"
+                      className="bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary"
                       title="Download code"
                     >
-                      <Download className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Download</span>
                     </button>
                     <button
                       onClick={handleShare}
                       disabled={isSharing}
-                      className="bg-purple-600 hover:bg-purple-700 px-3 sm:px-4 py-1 rounded text-xs sm:text-sm font-semibold transition flex items-center gap-1 sm:gap-2 disabled:opacity-50"
+                      className="bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Share code"
                     >
                       {isSharing ? (
                         <>
-                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-theme-primary border-t-transparent"></div>
                           <span className="hidden sm:inline">Sharing...</span>
                         </>
                       ) : (
                         <>
-                          <Share2 className="w-4 h-4" />
+                          <Share2 className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">Share</span>
                         </>
                       )}
@@ -1492,7 +1630,7 @@ export default function Home() {
                     <div className="w-full h-full relative">
                       <button
                         onClick={handleCopyCode}
-                        className="absolute top-4 right-4 z-50 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-lg"
+                        className="absolute top-4 right-4 z-50 bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-lg"
                       >
                         {copied ? (
                           <>
@@ -1509,7 +1647,7 @@ export default function Home() {
                       <CodeHighlight
                         code={currentCode}
                         language="html"
-                        theme="github-dark"
+                        theme={theme === "light" ? "github-light" : "github-dark"}
                       />
                     </div>
                   ) : (
@@ -1540,31 +1678,46 @@ export default function Home() {
                   )}
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-900">
+                <div className="flex flex-col items-center justify-center h-full text-theme-tertiary bg-theme-secondary rounded">
                   {isGeneratingCode ? (
                     <>
-                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-500 mb-4"></div>
-                      <p className="font-semibold">Generating code...</p>
+                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-theme-accent mb-4"></div>
+                      <p className="font-medium text-theme-secondary">Generating code...</p>
                     </>
                   ) : (
-                    <p>Code will appear here when the AI generates it</p>
+                    <p className="text-theme-tertiary">Code will appear here when the AI generates it</p>
                   )}
                 </div>
               )}
             </div>
           </div>
 
+          {/* Resize Handle - Only visible on large screens */}
+          <div
+            className="hidden lg:flex w-1 bg-theme-border hover:bg-theme-accent cursor-col-resize transition-colors relative group"
+            onMouseDown={handleResizeStart}
+            style={{ flexShrink: 0, zIndex: 10 }}
+          >
+            <div className="absolute inset-y-0 -left-1 -right-1" />
+          </div>
+
           {/* Chat Panel */}
           <div
-            className="lg:col-span-1 bg-slate-800/30 backdrop-blur rounded-lg p-3 sm:p-4 shadow-lg flex flex-col"
-            style={{ height: "700px", maxHeight: "700px" }}
+            className="bg-theme-panel border border-theme rounded-r-lg lg:rounded-l-none rounded-lg lg:rounded-lg p-3 sm:p-4 shadow-theme-md flex flex-col"
+            style={{ 
+              height: "calc(100vh - 120px)", 
+              maxHeight: "calc(100vh - 120px)",
+              width: isLargeScreen ? `${100 - panelWidth}%` : "100%",
+              minWidth: isLargeScreen ? "250px" : "auto",
+              flexShrink: 0
+            }}
           >
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h2 className="text-base sm:text-lg font-semibold text-slate-300">
+              <h2 className="text-base font-semibold text-theme-primary">
                 Chat
               </h2>
               {isConnected && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800/50 border border-slate-700/50">
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-theme-secondary">
                   <div
                     className={`w-2 h-2 rounded-full ${
                       agentStatus === "listening"
@@ -1576,7 +1729,7 @@ export default function Home() {
                         : "bg-slate-500"
                     }`}
                   />
-                  <span className="text-xs text-slate-300">
+                  <span className="text-xs text-theme-secondary">
                     {agentStatus === "listening" && "👂 Listening"}
                     {agentStatus === "speaking" && "🗣️ Speaking"}
                     {agentStatus === "thinking" && "🤔 Thinking"}
@@ -1590,7 +1743,7 @@ export default function Home() {
               className="space-y-2 flex-1 overflow-y-auto text-sm mb-3 min-h-0"
             >
               {transcript.length === 0 ? (
-                <p className="text-slate-500 text-center py-4 text-xs">
+                <p className="text-theme-tertiary text-center py-4 text-xs">
                   {isConnected
                     ? "Start chatting..."
                     : "Connect to start chatting"}
@@ -1609,23 +1762,23 @@ export default function Home() {
                       key={msg.id}
                       className={`p-2 rounded ${
                         msg.type === "user"
-                          ? "bg-blue-600/20"
-                          : "bg-purple-600/20"
+                          ? "bg-blue-600/10 dark:bg-blue-600/20 border border-blue-600/20"
+                          : "bg-purple-600/10 dark:bg-purple-600/20 border border-purple-600/20"
                       }`}
                     >
                       <div className="flex items-center gap-1 mb-1">
-                        <span className="text-xs font-medium text-slate-400">
+                        <span className="text-xs font-medium text-theme-secondary">
                           {msg.type === "user" ? "👤" : "🤖"}
                         </span>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-theme-tertiary">
                           {msg.timestamp.toLocaleTimeString()}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
+                      <p className="text-xs text-theme-primary leading-relaxed whitespace-pre-wrap break-words">
                         {msg.text}
                         {showSpinner && (
                           <span className="inline-block ml-1.5">
-                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-slate-400 border-t-transparent inline-block align-middle"></div>
+                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-theme-tertiary border-t-transparent inline-block align-middle"></div>
                           </span>
                         )}
                       </p>
@@ -1638,7 +1791,7 @@ export default function Home() {
 
             {/* Chat Input */}
             {isConnected && (
-              <div className="flex gap-2 border-t border-slate-700 pt-3 flex-shrink-0">
+              <div className="flex gap-2 border-t border-theme pt-3 flex-shrink-0 min-w-0">
                 <input
                   type="text"
                   value={chatMessage}
@@ -1651,12 +1804,12 @@ export default function Home() {
                   }}
                   placeholder="Type a message..."
                   disabled={isSendingMessage}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
+                  className="flex-1 min-w-0 bg-theme-secondary border border-theme rounded px-3 py-2 text-sm text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-theme-accent transition-colors disabled:opacity-50"
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={!chatMessage.trim() || isSendingMessage}
-                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center"
+                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center flex-shrink-0"
                   title="Send message"
                 >
                   {isSendingMessage ? (
@@ -1670,71 +1823,28 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-6 sm:mt-8 bg-slate-800/50 backdrop-blur rounded-lg p-4 sm:p-6">
-          <h3 className="text-lg sm:text-xl font-bold mb-3">How it works</h3>
-          <ul className="space-y-2 text-slate-300 text-sm sm:text-base">
-            <li>
-              • Click "Start Session" to establish a connection with the
-              conversational AI
-            </li>
-            <li>• Your microphone will activate automatically</li>
-            <li>
-              • The code appears in the preview pane in a sandboxed iframe
-            </li>
-            <li>• Ask the AI to create any web-based application.</li>
-          </ul>
+        <div className="mt-4 sm:mt-5">
+          <p className="text-xs sm:text-sm text-theme-tertiary">
+            <span className="font-medium text-theme-secondary">How it works:</span>{" "}
+            Click "Start Session" → Microphone activates → Code appears in preview → Ask for any web app
+          </p>
         </div>
 
         {/* Footer */}
-        <footer className="mt-8 sm:mt-12 border-t border-slate-700 pt-4 sm:pt-6">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-slate-400 text-xs sm:text-sm">
-            <span>Powered by</span>
+        <footer className="mt-8 sm:mt-12 border-t border-theme pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-theme-tertiary text-xs sm:text-sm">
             <a
-              href="https://www.agora.io"
+              href="https://convoai.world/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 hover:text-[#34b7ee] transition-colors duration-200 translate-y-1"
+              className="flex items-center gap-2 hover:text-theme-accent transition-colors duration-200"
             >
-              <svg
-                viewBox="0 0 399.34668 137.06667"
-                className="h-3 sm:h-4 transition-all duration-300 hover:scale-105"
-                role="img"
-                aria-label="Agora"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="m 1676.5,1027.77 c -168.56,0 -305.69,-137.129 -305.69,-305.68 0,-168.551 137.13,-305.672 305.69,-305.672 168.55,0 305.66,137.121 305.66,305.672 0,168.551 -137.11,305.68 -305.66,305.68 m 0,-474.231 c -92.95,0 -168.56,75.609 -168.56,168.551 0,92.937 75.61,168.551 168.56,168.551 92.93,0 168.55,-75.614 168.55,-168.551 0,-92.942 -75.62,-168.551 -168.55,-168.551"
-                  fill="currentColor"
-                  fillRule="nonzero"
-                  transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
-                ></path>
-                <path
-                  d="m 2185.11,949.031 -3.85,-3.722 -4.07,-3.938 -2.68,4.988 -2.54,4.723 c -22.03,40.938 -62.59,69.108 -108.49,75.338 l -11.34,1.54 V 416.219 l 11.43,1.66 c 62.57,9.09 125.7,57.109 125.7,143.91 v 160.27 c 0,85.332 66.43,158.98 151.23,167.671 l 8.98,0.918 v 137.222 l -10.97,-1.07 c -53.18,-5.22 -106.22,-32.109 -153.4,-77.769"
-                  fill="currentColor"
-                  fillRule="nonzero"
-                  transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
-                ></path>
-                <path
-                  d="m 501.902,967.207 -2.422,-3.363 -2.57,-3.547 -3.5,2.648 -3.301,2.512 C 436.578,1006.09 372.801,1027.57 305.68,1027.57 137.129,1027.57 0,890.438 0,721.887 0,553.336 137.129,416.203 305.68,416.203 c 67.121,0 130.89,21.481 184.41,62.121 l 3.32,2.512 3.492,2.648 2.567,-3.55 2.433,-3.36 c 23.231,-32.097 58.989,-53.597 98.098,-59 l 11.359,-1.558 V 1027.77 L 600,1026.21 c -39.109,-5.39 -74.867,-26.905 -98.098,-59.003 M 305.68,553.336 c -92.942,0 -168.551,75.609 -168.551,168.551 0,92.937 75.609,168.551 168.551,168.551 92.941,0 168.55,-75.614 168.55,-168.551 0,-92.942 -75.609,-168.551 -168.55,-168.551"
-                  fill="currentColor"
-                  fillRule="nonzero"
-                  transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
-                ></path>
-                <path
-                  d="m 2983.74,1026.2 c -39.11,-5.4 -74.86,-26.899 -98.09,-58.997 l -2.43,-3.351 -2.57,-3.559 -3.49,2.66 -3.31,2.508 c -53.52,40.629 -117.3,62.109 -184.43,62.109 -168.55,0 -305.67,-137.129 -305.67,-305.679 0,-168.547 137.12,-305.68 305.67,-305.68 67.13,0 130.91,21.48 184.44,62.109 l 3.3,2.512 3.49,2.648 2.57,-3.546 2.43,-3.364 c 23.23,-32.097 58.98,-53.597 98.09,-59 l 11.36,-1.558 V 1027.76 Z M 2689.42,553.344 c -92.93,0 -168.55,75.609 -168.55,168.547 0,92.941 75.62,168.55 168.55,168.55 92.94,0 168.55,-75.609 168.55,-168.55 0,-92.938 -75.61,-168.547 -168.55,-168.547"
-                  fill="currentColor"
-                  fillRule="nonzero"
-                  transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
-                ></path>
-                <path
-                  d="m 1186.88,483.656 c 69.87,56.071 114.72,142.086 114.72,238.438 0,63.441 -19.44,122.422 -52.66,171.32 -4.43,6.52 -9.19,12.789 -14.09,18.941 37.55,23.829 59.28,64.008 65.09,103.985 l 1.66,11.43 H 994.605 v -0.04 C 826.664,1027.02 690.254,890.195 690.254,722.094 c 0,-96.36 44.859,-182.391 114.75,-238.461 -13.117,-10.528 -25.391,-22.059 -36.609,-34.57 l 93.23,-102.161 c 30.809,40.59 79.539,66.864 134.309,66.864 92.936,0 168.546,-75.614 168.546,-168.551 0,-60.27 -31.82,-113.223 -79.52,-143.02 L 1178.22,0 c 74.83,55.7734 123.38,144.926 123.38,245.215 0,96.348 -44.85,182.367 -114.72,238.441 M 995.813,890.637 h 0.242 c 92.875,-0.063 168.425,-75.645 168.425,-168.543 0,-92.942 -75.61,-168.551 -168.546,-168.551 -92.942,0 -168.551,75.609 -168.551,168.551 0,92.898 75.543,168.48 168.43,168.543"
-                  fill="currentColor"
-                  fillRule="nonzero"
-                  transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
-                ></path>
-              </svg>
+              <img
+                src="/convoai-logo.png"
+                alt="ConvoAI World"
+                className="h-3 sm:h-4 opacity-70 hover:opacity-100 transition-opacity"
+              />
             </a>
-            <span>Conversational AI</span>
           </div>
         </footer>
       </div>

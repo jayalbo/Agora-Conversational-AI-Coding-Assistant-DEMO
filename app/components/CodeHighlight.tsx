@@ -48,7 +48,11 @@ export default function CodeHighlight({
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;");
-        setHighlightedCode(`<pre style="background: #0d1117; color: #c9d1d9; padding: 1rem; overflow: auto;"><code>${escaped}</code></pre>`);
+        // Theme-aware fallback
+        const isLight = theme.includes("light");
+        const bgColor = isLight ? "#ffffff" : "#0d1117";
+        const textColor = isLight ? "#24292f" : "#c9d1d9";
+        setHighlightedCode(`<pre style="background: ${bgColor}; color: ${textColor}; padding: 1rem; overflow: auto;"><code>${escaped}</code></pre>`);
       } finally {
         setIsLoading(false);
       }
@@ -57,12 +61,16 @@ export default function CodeHighlight({
     highlightCode();
   }, [code, language, theme]);
 
+  const isLight = theme.includes("light");
+  const bgColor = isLight ? "#ffffff" : "#0d1117";
+  const textColor = isLight ? "#24292f" : "#c9d1d9";
+
   if (isLoading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-[#0d1117]">
+      <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: bgColor }}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-          <p className="text-slate-400 text-sm">Highlighting code...</p>
+          <p className="text-sm" style={{ color: textColor }}>Highlighting code...</p>
         </div>
       </div>
     );
@@ -75,7 +83,6 @@ export default function CodeHighlight({
       style={{
         fontSize: "14px",
         lineHeight: "1.5",
-        backgroundColor: "#0d1117",
       }}
     />
   );
