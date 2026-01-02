@@ -57,21 +57,73 @@ export async function POST(request: NextRequest) {
       for (const mcp of mcpConfigs) {
         if (!mcp.address) continue;
         try {
-          // Create MCP client using HTTP transport (recommended for production)
-          const mcpClient = await createMCPClient({
-            transport: {
-              type: "http",
-              url: mcp.address,
-              headers: mcp.credentials
-                ? { Authorization: `Bearer ${mcp.credentials}` }
-                : undefined,
-            },
-          });
+          // Create MCP client using HTTP transport
+          let mcpClient: any = null;
+          let tools: Record<string, any> = {};
 
-          mcpClients.push(mcpClient);
+          try {
+            mcpClient = await createMCPClient({
+              transport: {
+                type: "http",
+                url: mcp.address,
+                headers: mcp.credentials
+                  ? { Authorization: `Bearer ${mcp.credentials}` }
+                  : undefined,
+              },
+            });
 
-          // Get tools from MCP server - AI SDK handles the conversion automatically
-          const tools = await mcpClient.tools();
+            mcpClients.push(mcpClient);
+
+            // Get tools from MCP server - AI SDK handles the conversion automatically
+            tools = await mcpClient.tools();
+          } catch (initError: any) {
+            // If initialization fails, try to fetch tools directly as fallback
+            console.warn(
+              `⚠️ MCP client initialization failed for ${mcp.name}, trying direct tools/list...`
+            );
+
+            try {
+              const toolsListResponse = await fetch(mcp.address, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(mcp.credentials
+                    ? { Authorization: `Bearer ${mcp.credentials}` }
+                    : {}),
+                },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: "tools-list-1",
+                  method: "tools/list",
+                  params: {},
+                }),
+              });
+
+              if (toolsListResponse.ok) {
+                const toolsListData = await toolsListResponse.json();
+                if (toolsListData.result?.tools) {
+                  // Convert MCP tools to AI SDK tool format
+                  for (const tool of toolsListData.result.tools) {
+                    tools[tool.name] = {
+                      description: tool.description || "",
+                      parameters: tool.inputSchema || {},
+                    };
+                  }
+                  console.log(
+                    `✅ Fallback: Discovered ${
+                      Object.keys(tools).length
+                    } tools from ${mcp.name} via direct call`
+                  );
+                }
+              }
+            } catch (fallbackError) {
+              console.error(
+                `❌ Fallback tools/list also failed for ${mcp.name}:`,
+                fallbackError
+              );
+              throw initError; // Throw original error if fallback also fails
+            }
+          }
 
           // Merge tools into the collection
           Object.assign(allMCPTools, tools);
@@ -82,8 +134,27 @@ export async function POST(request: NextRequest) {
           } else {
             console.warn(`⚠️ No tools discovered from ${mcp.name}`);
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error(`❌ Failed to discover tools from ${mcp.name}:`, e);
+          // Log more details about the error
+          if (e?.message) {
+            console.error(`   Error message: ${e.message}`);
+          }
+          if (e?.cause) {
+            console.error(`   Error cause:`, e.cause);
+          }
+          if (e?.response) {
+            console.error(`   Error response:`, e.response);
+          }
+          // Try to extract response body if available
+          if (e?.response?.body) {
+            try {
+              const bodyText = await e.response.body.text();
+              console.error(`   Response body:`, bodyText);
+            } catch (bodyError) {
+              console.error(`   Could not read response body:`, bodyError);
+            }
+          }
         }
       }
 
@@ -237,10 +308,12 @@ export async function POST(request: NextRequest) {
 
           // Friendly waiting messages - pick one randomly per request
           const waitingMessages = [
-            "Just a moment, I'm looking that up for you...",
-            "Let me find that information for you...",
-            "Give me a sec to check that...",
-            "Looking into that now...",
+            "Just a moment...",
+            "Working on that for you...",
+            "One second...",
+            "On it...",
+            "Processing that...",
+            "Taking care of that...",
           ];
 
           // Use fullStream to capture all events including tool calls
@@ -294,6 +367,29 @@ export async function POST(request: NextRequest) {
               console.log(
                 `✅ [Round ${roundNumber}] Tool result received for: ${toolResultChunk.toolName}`
               );
+              // Print the full tool result, especially useful for deploy-html
+              const output = toolResultChunk.output;
+              if (toolResultChunk.toolName === "deploy-html") {
+                console.log(
+                  "🔗 deploy-html tool output:",
+                  JSON.stringify(output, null, 2)
+                );
+                // Extract URL from successful deployments
+                if (
+                  output &&
+                  !output.isError &&
+                  output.content &&
+                  output.content[0]?.text
+                ) {
+                  const resultText = output.content[0].text;
+                  console.log("🌐 deploy-html deployed URL:", resultText);
+                } else if (output?.isError) {
+                  console.log(
+                    "❌ deploy-html error:",
+                    output.content?.[0]?.text || "Unknown error"
+                  );
+                }
+              }
             } else if (chunkType === "text-delta") {
               // text-delta chunks contain incremental text deltas (not accumulated)
               // So chunk.text is already the delta we need to send
