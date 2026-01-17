@@ -451,6 +451,17 @@ export class AgoraConversationalClient {
   }
 
   /**
+   * Gets the current microphone volume level.
+   * @returns Volume level between 0 and 1, or 0 if no track
+   */
+  getVolumeLevel(): number {
+    if (this.localAudioTrack) {
+      return this.localAudioTrack.getVolumeLevel();
+    }
+    return 0;
+  }
+
+  /**
    * Stops the microphone completely.
    * This requires re-initializing the track to start again.
    * Use setMuted() if you just want to temporarily disable audio.

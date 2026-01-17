@@ -21,6 +21,8 @@ import {
   Eye,
   Code,
   X,
+  Pencil,
+  Check,
 } from "lucide-react";
 import SettingsModal, {
   type UserCredentials,
@@ -122,6 +124,9 @@ export default function Home() {
   const [panelWidth, setPanelWidth] = useState(80); // Percentage for preview panel
   const [isResizing, setIsResizing] = useState(false);
   const [isLargeScreen, setIsLargeScreen] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editableCode, setEditableCode] = useState("");
 
   const agoraClientRef = useRef<AgoraClientType | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -194,11 +199,28 @@ export default function Home() {
     const checkScreenSize = () => {
       setIsLargeScreen(window.innerWidth >= 1024);
     };
-    
+
     checkScreenSize();
     window.addEventListener("resize", checkScreenSize);
     return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
+
+  // Poll audio level for waveform visualization
+  useEffect(() => {
+    if (!isConnected || !isMicActive || isMuted) {
+      setAudioLevel(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (agoraClientRef.current) {
+        const level = agoraClientRef.current.getVolumeLevel();
+        setAudioLevel(level);
+      }
+    }, 50); // 20fps update
+
+    return () => clearInterval(interval);
+  }, [isConnected, isMicActive, isMuted]);
 
   // Toggle theme function
   const toggleTheme = () => {
@@ -372,6 +394,38 @@ export default function Home() {
       document.removeEventListener("blur", handleBlur, true);
     };
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in input fields
+      const target = e.target as HTMLElement;
+      const isInputElement =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.contentEditable === "true";
+
+      // Cmd/Ctrl + M to toggle mute
+      if ((e.metaKey || e.ctrlKey) && e.key === "m") {
+        e.preventDefault();
+        if (isConnected && !isMuted) {
+          handleToggleMute();
+        } else if (isConnected && isMuted) {
+          handleToggleMute();
+        }
+      }
+
+      // Escape to end session (only when not in input)
+      if (e.key === "Escape" && !isInputElement && isConnected) {
+        e.preventDefault();
+        handleDisconnect();
+      }
+    };
+
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => document.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isConnected, isMuted]);
 
   /**
    * Parses AI agent responses to separate spoken text from code blocks.
@@ -851,7 +905,7 @@ export default function Home() {
   // Only called when agent is connected (button is disabled otherwise)
   const notifyAgentAboutCode = async (
     code: string,
-    source: "imported" | "loaded"
+    source: "imported" | "loaded" | "edited"
   ) => {
     if (!isConnected || !credentials || !agentId) {
       console.log("Skipping agent notification - agent not ready");
@@ -859,9 +913,15 @@ export default function Home() {
     }
 
     try {
-      // Create a message informing the agent about the code
-      // Using a system message format that won't appear in transcript
-      const message = `Current code context:\n\n${code}\n\nPlease be aware of this code when responding.`;
+      // Create a clear message about what action the user performed
+      let message = "";
+      if (source === "edited") {
+        message = `The user has manually edited the code. Here is the updated code they want to continue working with:\n\n${code}\n\nAcknowledge the changes briefly and ask how you can help improve it further.`;
+      } else if (source === "imported") {
+        message = `The user has imported/pasted new code. Here is the code they want to work with:\n\n${code}\n\nAcknowledge that you see their code and ask what they'd like to do with it.`;
+      } else if (source === "loaded") {
+        message = `The user has loaded code from a shared URL. Here is the code:\n\n${code}\n\nAcknowledge that you've loaded their code and ask how you can help.`;
+      }
 
       await fetch("/api/agent/message", {
         method: "POST",
@@ -1236,6 +1296,22 @@ export default function Home() {
                       </select>
                     )}
 
+                    {/* Audio Waveform Visualizer */}
+                    {!isMuted && (
+                      <div className="hidden sm:flex items-center gap-0.5 h-8 px-2">
+                        {[0.6, 1, 0.7, 0.9, 0.5].map((scale, i) => (
+                          <div
+                            key={i}
+                            className="w-1 bg-green-500 rounded-full transition-all duration-75"
+                            style={{
+                              height: `${Math.max(4, Math.min(24, audioLevel * 80 * scale + Math.random() * 4))}px`,
+                              opacity: audioLevel > 0.01 ? 1 : 0.3,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+
                     <button
                       onClick={handleToggleMute}
                       className={`relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-200 hover:scale-105 ${
@@ -1243,15 +1319,12 @@ export default function Home() {
                           ? "bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50"
                           : "bg-green-500/20 hover:bg-green-500/30 border-2 border-green-500/50"
                       }`}
-                      title={isMuted ? "Unmute microphone" : "Mute microphone"}
+                      title={isMuted ? "Unmute microphone (⌘M)" : "Mute microphone (⌘M)"}
                     >
                       {isMuted ? (
                         <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
                       ) : (
                         <Mic className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
-                      )}
-                      {!isMuted && (
-                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full animate-pulse"></div>
                       )}
                     </button>
 
@@ -1522,7 +1595,7 @@ export default function Home() {
           >
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3 sm:gap-0 flex-shrink-0">
               <h2 className="text-base font-semibold text-theme-primary">
-                {showSourceCode ? "Source Code" : "Preview"}
+                {isEditMode ? "Edit Code" : showSourceCode ? "Source Code" : "Preview"}
               </h2>
               <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
                 {codeBlocks.length > 1 && (
@@ -1568,21 +1641,71 @@ export default function Home() {
                   <>
                     <button
                       onClick={() => setShowSourceCode(!showSourceCode)}
-                      className="bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary"
-                      title={showSourceCode ? "Switch to preview" : "Switch to code"}
+                      className={`bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary ${!showSourceCode && !isEditMode ? "ring-2 ring-theme-accent" : ""}`}
+                      title="Switch to preview"
                     >
-                      {showSourceCode ? (
-                        <>
-                          <Eye className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Preview</span>
-                        </>
-                      ) : (
-                        <>
-                          <Code className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Code</span>
-                        </>
-                      )}
+                      <Eye className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Preview</span>
                     </button>
+                    <button
+                      onClick={() => {
+                        setShowSourceCode(true);
+                        setIsEditMode(false);
+                      }}
+                      className={`bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary ${showSourceCode && !isEditMode ? "ring-2 ring-theme-accent" : ""}`}
+                      title="View source code"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Code</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isEditMode) {
+                          setEditableCode(currentCode);
+                          setIsEditMode(true);
+                          setShowSourceCode(true);
+                        }
+                      }}
+                      className={`bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary ${isEditMode ? "ring-2 ring-theme-accent" : ""}`}
+                      title="Edit code manually"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Edit</span>
+                    </button>
+                    {isEditMode && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setIsEditMode(false);
+                          }}
+                          className="bg-theme-secondary hover:bg-theme-hover border border-theme px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-theme-primary"
+                          title="Cancel editing"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Cancel</span>
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setCurrentCode(editableCode);
+                            setCodeBlocks((prev) => [
+                              ...prev,
+                              {
+                                id: `edited-${Date.now()}`,
+                                html: editableCode,
+                                timestamp: new Date(),
+                              },
+                            ]);
+                            await notifyAgentAboutCode(editableCode, "edited");
+                            setIsEditMode(false);
+                          }}
+                          className="bg-green-600 hover:bg-green-700 border border-green-600 px-2.5 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors flex items-center gap-1.5 text-white"
+                          title="Save changes and sync with AI"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Save</span>
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={async () => {
                         const zip = new JSZip();
@@ -1643,27 +1766,39 @@ export default function Home() {
                 <>
                   {showSourceCode ? (
                     <div className="w-full h-full relative">
-                      <button
-                        onClick={handleCopyCode}
-                        className="absolute top-4 right-4 z-50 bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-lg"
-                      >
-                        {copied ? (
-                          <>
-                            <span>✓</span>
-                            <span>Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>📋</span>
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                      <CodeHighlight
-                        code={currentCode}
-                        language="html"
-                        theme={theme === "light" ? "github-light" : "github-dark"}
-                      />
+                      {!isEditMode && (
+                        <button
+                          onClick={handleCopyCode}
+                          className="absolute top-4 right-4 z-50 bg-theme-secondary hover:bg-theme-tertiary text-theme-primary border border-theme px-3 py-1.5 rounded text-xs font-semibold transition flex items-center gap-1.5 shadow-lg"
+                        >
+                          {copied ? (
+                            <>
+                              <span>✓</span>
+                              <span>Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📋</span>
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                      {isEditMode ? (
+                        <textarea
+                          value={editableCode}
+                          onChange={(e) => setEditableCode(e.target.value)}
+                          className="w-full h-full p-4 font-mono text-sm bg-theme-secondary text-theme-primary border-0 resize-none focus:outline-none focus:ring-2 focus:ring-theme-accent/50"
+                          spellCheck={false}
+                          placeholder="Edit your code here..."
+                        />
+                      ) : (
+                        <CodeHighlight
+                          code={currentCode}
+                          language="html"
+                          theme={theme === "light" ? "github-light" : "github-dark"}
+                        />
+                      )}
                     </div>
                   ) : (
                     <iframe
@@ -1704,16 +1839,58 @@ export default function Home() {
                       <p className="text-xs text-theme-tertiary mt-1">This may take a few seconds</p>
                     </div>
                   ) : (
-                    <div className="text-center max-w-sm animate-fade-in">
+                    <div className="text-center max-w-md animate-fade-in px-4">
                       <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-theme-accent-light flex items-center justify-center">
                         <Code className="w-8 h-8 text-theme-accent" />
                       </div>
                       <h3 className="font-semibold text-theme-primary mb-2">No code yet</h3>
-                      <p className="text-sm text-theme-tertiary leading-relaxed">
+                      <p className="text-sm text-theme-tertiary leading-relaxed mb-4">
                         Start a session and ask me to build something!
-                        <br />
-                        <span className="text-theme-secondary">Try: "Create a todo app" or "Build a calculator"</span>
                       </p>
+                      {/* Quick Start Templates */}
+                      {isConnected && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-theme-tertiary mb-2">Quick start:</p>
+                          <div className="flex flex-wrap justify-center gap-2">
+                            {[
+                              { label: "Todo App", prompt: "Create a simple todo app with add, complete, and delete functionality" },
+                              { label: "Calculator", prompt: "Build a calculator with basic math operations" },
+                              { label: "Snake Game", prompt: "Create a snake game with arrow key controls" },
+                              { label: "Weather Card", prompt: "Build a weather card UI with temperature and conditions" },
+                            ].map((template) => (
+                              <button
+                                key={template.label}
+                                onClick={async () => {
+                                  if (!credentials || !agentId) return;
+                                  setChatMessage("");
+                                  setIsSendingMessage(true);
+                                  try {
+                                    await fetch("/api/agent/message", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        message: template.prompt,
+                                        agentUid: credentials.agoraBotUid,
+                                        appId: credentials.agoraAppId,
+                                        customerId: credentials.agoraCustomerId,
+                                        customerSecret: credentials.agoraCustomerSecret,
+                                      }),
+                                    });
+                                  } catch (err) {
+                                    console.error("Failed to send template:", err);
+                                  } finally {
+                                    setIsSendingMessage(false);
+                                  }
+                                }}
+                                disabled={isSendingMessage}
+                                className="px-3 py-1.5 text-xs rounded-full bg-theme-accent/10 hover:bg-theme-accent/20 text-theme-accent border border-theme-accent/30 transition-all hover:scale-105 disabled:opacity-50"
+                              >
+                                {template.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1869,32 +2046,47 @@ export default function Home() {
         </div>
 
         {/* Footer */}
-        <footer className="mt-6 py-4 flex items-center justify-center gap-4 text-theme-tertiary text-xs">
-          <span className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-              <span>Voice</span>
+        <footer className="mt-6 py-4 flex flex-col items-center gap-3 text-theme-tertiary text-xs">
+          {/* Keyboard shortcuts */}
+          <div className="flex items-center gap-3 flex-wrap justify-center">
+            <span className="text-theme-secondary">Shortcuts:</span>
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-theme-tertiary/30 font-mono text-[10px]">⌘M</kbd>
+              <span>Mute</span>
             </span>
-            <span className="text-theme-tertiary">→</span>
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-              <span>AI</span>
+            <span className="inline-flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-theme-tertiary/30 font-mono text-[10px]">Esc</kbd>
+              <span>End session</span>
             </span>
-            <span className="text-theme-tertiary">→</span>
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-              <span>Code</span>
+          </div>
+          {/* Flow + link */}
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                <span>Voice</span>
+              </span>
+              <span className="text-theme-tertiary">→</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                <span>AI</span>
+              </span>
+              <span className="text-theme-tertiary">→</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                <span>Code</span>
+              </span>
             </span>
-          </span>
-          <span className="text-theme-tertiary">•</span>
-          <a
-            href="https://convoai.world/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-theme-accent transition-colors"
-          >
-            convoai.world
-          </a>
+            <span className="text-theme-tertiary">•</span>
+            <a
+              href="https://convoai.world/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-theme-accent transition-colors"
+            >
+              convoai.world
+            </a>
+          </div>
         </footer>
       </div>
     </div>
