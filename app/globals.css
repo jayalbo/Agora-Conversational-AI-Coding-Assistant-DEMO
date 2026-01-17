@@ -2,69 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-/* VS Code-inspired theme variables */
+/* Modern theme variables */
 :root {
-  /* Light theme */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f6f8fa;
-  --bg-tertiary: #e7ebf0;
+  /* Light theme - cleaner, more modern */
+  --bg-primary: #fafafa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f4f4f5;
   --bg-panel: #ffffff;
-  --bg-hover: #f0f0f0;
-  --bg-active: #e8e8e8;
-  --border-color: #d0d7de;
-  --border-hover: #b1bac4;
-  --text-primary: #24292f;
-  --text-secondary: #57606a;
-  --text-tertiary: #8b949e;
-  --accent: #0969da;
-  --accent-hover: #0860ca;
-  --shadow-sm: rgba(0, 0, 0, 0.05);
-  --shadow-md: rgba(0, 0, 0, 0.1);
-  --shadow-lg: rgba(0, 0, 0, 0.15);
-  
-  /* Subtle gradient for backgrounds */
-  --gradient-start: #fafbfc;
-  --gradient-end: #f6f8fa;
-  
-  /* CodeByVoice gradient - darker for light mode */
-  --gradient-codebyvoice-start: #0088cc;
-  --gradient-codebyvoice-mid: #0066aa;
-  --gradient-codebyvoice-end: #7c3aed;
+  --bg-hover: #f4f4f5;
+  --bg-active: #e4e4e7;
+  --border-color: #e4e4e7;
+  --border-hover: #d4d4d8;
+  --text-primary: #18181b;
+  --text-secondary: #3f3f46;
+  --text-tertiary: #71717a;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-light: rgba(99, 102, 241, 0.1);
+  --success: #22c55e;
+  --success-light: rgba(34, 197, 94, 0.1);
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --shadow-sm: rgba(0, 0, 0, 0.04);
+  --shadow-md: rgba(0, 0, 0, 0.08);
+  --shadow-lg: rgba(0, 0, 0, 0.12);
+
+  /* Gradient backgrounds */
+  --gradient-start: #fafafa;
+  --gradient-end: #f4f4f5;
+
+  /* CodeByVoice gradient */
+  --gradient-codebyvoice-start: #6366f1;
+  --gradient-codebyvoice-mid: #8b5cf6;
+  --gradient-codebyvoice-end: #a855f7;
 }
 
 .dark {
-  /* Dark theme (VS Code Dark+) */
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-tertiary: #2d2d30;
-  --bg-panel: #252526;
-  --bg-hover: #2a2d2e;
-  --bg-active: #37373d;
-  --border-color: #3e3e42;
-  --border-hover: #505050;
-  --text-primary: #cccccc;
-  --text-secondary: #9cdcfe;
-  --text-tertiary: #858585;
-  --accent: #007acc;
-  --accent-hover: #1a8cd8;
-  --shadow-sm: rgba(0, 0, 0, 0.3);
+  /* Dark theme - refined, easier on eyes */
+  --bg-primary: #09090b;
+  --bg-secondary: #18181b;
+  --bg-tertiary: #27272a;
+  --bg-panel: #18181b;
+  --bg-hover: #27272a;
+  --bg-active: #3f3f46;
+  --border-color: #27272a;
+  --border-hover: #3f3f46;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --accent: #818cf8;
+  --accent-hover: #6366f1;
+  --accent-light: rgba(129, 140, 248, 0.15);
+  --success: #4ade80;
+  --success-light: rgba(74, 222, 128, 0.15);
+  --error: #f87171;
+  --warning: #fbbf24;
+  --shadow-sm: rgba(0, 0, 0, 0.4);
   --shadow-md: rgba(0, 0, 0, 0.5);
-  --shadow-lg: rgba(0, 0, 0, 0.7);
-  
-  /* Subtle gradient for backgrounds */
-  --gradient-start: #1e1e1e;
-  --gradient-end: #252526;
-  
-  /* CodeByVoice gradient - brighter for dark mode */
-  --gradient-codebyvoice-start: #00c2ff;
-  --gradient-codebyvoice-mid: #a0faff;
-  --gradient-codebyvoice-end: #c46ffb;
+  --shadow-lg: rgba(0, 0, 0, 0.6);
+
+  /* Gradient backgrounds */
+  --gradient-start: #09090b;
+  --gradient-end: #18181b;
+
+  /* CodeByVoice gradient - vibrant for dark mode */
+  --gradient-codebyvoice-start: #818cf8;
+  --gradient-codebyvoice-mid: #a78bfa;
+  --gradient-codebyvoice-end: #c084fc;
 }
 
 body {
-  background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+  background: var(--bg-primary);
   color: var(--text-primary);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @layer utilities {
@@ -136,6 +172,55 @@ body {
   .shadow-theme-lg {
     box-shadow: 0 10px 15px var(--shadow-lg);
   }
+
+  .bg-theme-accent-light {
+    background-color: var(--accent-light);
+  }
+
+  .bg-theme-success-light {
+    background-color: var(--success-light);
+  }
+
+  /* Glass effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .dark .glass {
+    background: rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 
 /* Shiki code highlighting styles */

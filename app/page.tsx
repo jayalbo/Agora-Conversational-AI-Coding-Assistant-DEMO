@@ -1100,24 +1100,40 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-theme-primary text-theme-primary transition-colors duration-300">
-      {/* VS Code-like minimal top bar */}
-      <header className="border-b border-theme bg-theme-secondary px-4 py-2 flex items-center justify-between shadow-theme-sm">
-        <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
-          <h1 
-            className="text-xl sm:text-2xl font-bold tracking-tight bg-clip-text text-transparent font-sans whitespace-nowrap"
+      {/* Clean minimal header */}
+      <header className="border-b border-theme bg-theme-panel/80 backdrop-blur-sm px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-3 flex-shrink-0 min-w-0">
+          {/* Logo mark */}
+          <div
+            className="relative w-9 h-9 rounded-xl flex items-center justify-center shadow-lg"
             style={{
-              backgroundImage: 'linear-gradient(90deg, var(--gradient-codebyvoice-start) 0%, var(--gradient-codebyvoice-mid) 33%, var(--gradient-codebyvoice-end) 100%)',
+              background: 'linear-gradient(135deg, var(--gradient-codebyvoice-start) 0%, var(--gradient-codebyvoice-mid) 50%, var(--gradient-codebyvoice-end) 100%)',
             }}
           >
-            CodeByVoice
-          </h1>
-          <div className="hidden sm:flex items-baseline gap-1.5 flex-shrink-0">
-            <span className="text-theme-secondary text-xs">by</span>
-            <span className="inline-flex items-baseline">
+            <div className="absolute inset-0 rounded-xl opacity-50" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 50%)' }} />
+            <svg viewBox="0 0 24 24" className="w-5 h-5 text-white relative z-10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 18l6-6-6-6" />
+              <path d="M8 6l-6 6 6 6" />
+              <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+              <path d="M12 8v-2" />
+              <path d="M12 18v-2" />
+            </svg>
+          </div>
+          {/* Text */}
+          <div className="flex flex-col">
+            <h1
+              className="text-lg sm:text-xl font-bold tracking-tight bg-clip-text text-transparent font-sans whitespace-nowrap leading-tight"
+              style={{
+                backgroundImage: 'linear-gradient(90deg, var(--gradient-codebyvoice-start) 0%, var(--gradient-codebyvoice-mid) 50%, var(--gradient-codebyvoice-end) 100%)',
+              }}
+            >
+              CodeByVoice
+            </h1>
+            <div className="hidden sm:flex items-center gap-1.5 -mt-0.5">
+              <span className="text-theme-tertiary text-[10px]">powered by</span>
               <svg
                 viewBox="0 0 399.34668 137.06667"
-                className="h-3 text-theme-secondary transition-colors hover:text-theme-accent"
-                style={{ transform: 'translateY(5px)' }}
+                className="h-2.5 text-theme-secondary"
                 role="img"
                 aria-label="Agora"
                 xmlns="http://www.w3.org/2000/svg"
@@ -1153,8 +1169,7 @@ export default function Home() {
                   transform="matrix(0.13333333,0,0,-0.13333333,0,137.06667)"
                 ></path>
               </svg>
-            </span>
-            <span className="text-theme-secondary text-xs">Conversational AI</span>
+            </div>
           </div>
         </div>
         
@@ -1678,14 +1693,28 @@ export default function Home() {
                   )}
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-theme-tertiary bg-theme-secondary rounded">
+                <div className="flex flex-col items-center justify-center h-full text-theme-tertiary bg-theme-secondary/50 rounded-lg border border-theme border-dashed">
                   {isGeneratingCode ? (
-                    <>
-                      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-theme-accent mb-4"></div>
+                    <div className="text-center animate-fade-in">
+                      <div className="relative w-16 h-16 mx-auto mb-4">
+                        <div className="absolute inset-0 rounded-full border-4 border-theme-accent/20"></div>
+                        <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-theme-accent animate-spin"></div>
+                      </div>
                       <p className="font-medium text-theme-secondary">Generating code...</p>
-                    </>
+                      <p className="text-xs text-theme-tertiary mt-1">This may take a few seconds</p>
+                    </div>
                   ) : (
-                    <p className="text-theme-tertiary">Code will appear here when the AI generates it</p>
+                    <div className="text-center max-w-sm animate-fade-in">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-theme-accent-light flex items-center justify-center">
+                        <Code className="w-8 h-8 text-theme-accent" />
+                      </div>
+                      <h3 className="font-semibold text-theme-primary mb-2">No code yet</h3>
+                      <p className="text-sm text-theme-tertiary leading-relaxed">
+                        Start a session and ask me to build something!
+                        <br />
+                        <span className="text-theme-secondary">Try: "Create a todo app" or "Build a calculator"</span>
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -1713,27 +1742,35 @@ export default function Home() {
             }}
           >
             <div className="flex items-center justify-between mb-3 flex-shrink-0">
-              <h2 className="text-base font-semibold text-theme-primary">
+              <h2 className="text-sm font-semibold text-theme-primary uppercase tracking-wide">
                 Chat
               </h2>
               {isConnected && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-theme-secondary">
+                <div className={`flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  agentStatus === "listening"
+                    ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                    : agentStatus === "speaking"
+                    ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                    : agentStatus === "thinking"
+                    ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                    : "bg-theme-secondary text-theme-tertiary"
+                }`}>
                   <div
-                    className={`w-2 h-2 rounded-full ${
+                    className={`w-1.5 h-1.5 rounded-full ${
                       agentStatus === "listening"
                         ? "bg-green-500 animate-pulse"
                         : agentStatus === "speaking"
                         ? "bg-blue-500 animate-pulse"
                         : agentStatus === "thinking"
                         ? "bg-purple-500 animate-pulse"
-                        : "bg-slate-500"
+                        : "bg-slate-400"
                     }`}
                   />
-                  <span className="text-xs text-theme-secondary">
-                    {agentStatus === "listening" && "👂 Listening"}
-                    {agentStatus === "speaking" && "🗣️ Speaking"}
-                    {agentStatus === "thinking" && "🤔 Thinking"}
-                    {(agentStatus === "idle" || agentStatus === "silent") && "✅ Ready"}
+                  <span>
+                    {agentStatus === "listening" && "Listening"}
+                    {agentStatus === "speaking" && "Speaking"}
+                    {agentStatus === "thinking" && "Thinking"}
+                    {(agentStatus === "idle" || agentStatus === "silent") && "Ready"}
                   </span>
                 </div>
               )}
@@ -1743,45 +1780,53 @@ export default function Home() {
               className="space-y-2 flex-1 overflow-y-auto text-sm mb-3 min-h-0"
             >
               {transcript.length === 0 ? (
-                <p className="text-theme-tertiary text-center py-4 text-xs">
-                  {isConnected
-                    ? "Start chatting..."
-                    : "Connect to start chatting"}
-                </p>
+                <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-theme-accent-light flex items-center justify-center mb-3">
+                    <Mic className="w-5 h-5 text-theme-accent" />
+                  </div>
+                  <p className="text-sm text-theme-secondary font-medium mb-1">
+                    {isConnected ? "Start talking" : "Ready to chat"}
+                  </p>
+                  <p className="text-xs text-theme-tertiary">
+                    {isConnected
+                      ? "I'm listening..."
+                      : "Click 'Start Session' to begin"}
+                  </p>
+                </div>
               ) : (
                 transcript.map((msg, index) => {
                   // Check if this is the last agent message and status is still speaking
-                  const isLastAgentMessage = 
-                    msg.type === "agent" && 
-                    (index === transcript.length - 1 || 
+                  const isLastAgentMessage =
+                    msg.type === "agent" &&
+                    (index === transcript.length - 1 ||
                      transcript.slice(index + 1).every(m => m.type !== "agent"));
                   const showSpinner = isLastAgentMessage && agentStatus === "speaking";
-                  
+                  const isUser = msg.type === "user";
+
                   return (
                     <div
                       key={msg.id}
-                      className={`p-2 rounded ${
-                        msg.type === "user"
-                          ? "bg-blue-600/10 dark:bg-blue-600/20 border border-blue-600/20"
-                          : "bg-purple-600/10 dark:bg-purple-600/20 border border-purple-600/20"
-                      }`}
+                      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
                     >
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="text-xs font-medium text-theme-secondary">
-                          {msg.type === "user" ? "👤" : "🤖"}
-                        </span>
-                        <span className="text-xs text-theme-tertiary">
-                          {msg.timestamp.toLocaleTimeString()}
+                      <div
+                        className={`max-w-[85%] p-3 rounded-2xl ${
+                          isUser
+                            ? "bg-theme-accent text-white rounded-br-md"
+                            : "bg-theme-tertiary/30 text-theme-primary rounded-bl-md"
+                        }`}
+                      >
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                          {msg.text}
+                          {showSpinner && (
+                            <span className="inline-block ml-1.5">
+                              <div className="animate-spin rounded-full h-3 w-3 border-2 border-current/30 border-t-current inline-block align-middle"></div>
+                            </span>
+                          )}
+                        </p>
+                        <span className={`text-[10px] mt-1 block ${isUser ? "text-white/60" : "text-theme-tertiary"}`}>
+                          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <p className="text-xs text-theme-primary leading-relaxed whitespace-pre-wrap break-words">
-                        {msg.text}
-                        {showSpinner && (
-                          <span className="inline-block ml-1.5">
-                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-theme-tertiary border-t-transparent inline-block align-middle"></div>
-                          </span>
-                        )}
-                      </p>
                     </div>
                   );
                 })
@@ -1791,7 +1836,7 @@ export default function Home() {
 
             {/* Chat Input */}
             {isConnected && (
-              <div className="flex gap-2 border-t border-theme pt-3 flex-shrink-0 min-w-0">
+              <div className="flex gap-2 pt-3 flex-shrink-0 min-w-0">
                 <input
                   type="text"
                   value={chatMessage}
@@ -1804,12 +1849,12 @@ export default function Home() {
                   }}
                   placeholder="Type a message..."
                   disabled={isSendingMessage}
-                  className="flex-1 min-w-0 bg-theme-secondary border border-theme rounded px-3 py-2 text-sm text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-theme-accent transition-colors disabled:opacity-50"
+                  className="flex-1 min-w-0 bg-theme-tertiary/50 border-0 rounded-full px-4 py-2.5 text-sm text-theme-primary placeholder-theme-tertiary focus:outline-none focus:ring-2 focus:ring-theme-accent/50 transition-all disabled:opacity-50"
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={!chatMessage.trim() || isSendingMessage}
-                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center flex-shrink-0"
+                  className="bg-theme-accent hover:bg-theme-accent-hover disabled:opacity-40 disabled:cursor-not-allowed w-10 h-10 rounded-full text-white transition-all flex items-center justify-center flex-shrink-0 hover:scale-105 active:scale-95"
                   title="Send message"
                 >
                   {isSendingMessage ? (
@@ -1823,29 +1868,33 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-4 sm:mt-5">
-          <p className="text-xs sm:text-sm text-theme-tertiary">
-            <span className="font-medium text-theme-secondary">How it works:</span>{" "}
-            Click "Start Session" → Microphone activates → Code appears in preview → Ask for any web app
-          </p>
-        </div>
-
         {/* Footer */}
-        <footer className="mt-8 sm:mt-12 border-t border-theme pt-4 sm:pt-6">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-theme-tertiary text-xs sm:text-sm">
-            <a
-              href="https://convoai.world/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 hover:text-theme-accent transition-colors duration-200"
-            >
-              <img
-                src="/convoai-logo.png"
-                alt="ConvoAI World"
-                className="h-3 sm:h-4 opacity-70 hover:opacity-100 transition-opacity"
-              />
-            </a>
-          </div>
+        <footer className="mt-6 py-4 flex items-center justify-center gap-4 text-theme-tertiary text-xs">
+          <span className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+              <span>Voice</span>
+            </span>
+            <span className="text-theme-tertiary">→</span>
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              <span>AI</span>
+            </span>
+            <span className="text-theme-tertiary">→</span>
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-theme-tertiary/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+              <span>Code</span>
+            </span>
+          </span>
+          <span className="text-theme-tertiary">•</span>
+          <a
+            href="https://convoai.world/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-theme-accent transition-colors"
+          >
+            convoai.world
+          </a>
         </footer>
       </div>
     </div>
