@@ -2026,7 +2026,7 @@ export default function Home() {
                   }}
                   placeholder="Type a message..."
                   disabled={isSendingMessage}
-                  className="flex-1 min-w-0 bg-theme-tertiary/50 border-0 rounded-full px-4 py-2.5 text-sm text-theme-primary placeholder-theme-tertiary focus:outline-none focus:ring-2 focus:ring-theme-accent/50 transition-all disabled:opacity-50"
+                  className="flex-1 min-w-0 bg-theme-tertiary/50 border-0 rounded-full px-4 py-2.5 text-sm text-black placeholder-theme-tertiary focus:outline-none focus:ring-2 focus:ring-theme-accent/50 transition-all disabled:opacity-50"
                 />
                 <button
                   onClick={handleSendMessage}

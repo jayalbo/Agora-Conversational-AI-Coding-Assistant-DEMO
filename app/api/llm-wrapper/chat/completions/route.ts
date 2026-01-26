@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { streamText, stepCountIs } from "ai";
+import { streamText, stepCountIs, tool, jsonSchema } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createMCPClient } from "@ai-sdk/mcp";
+import { z } from "zod";
 
 interface MCPConfig {
   name: string;
@@ -62,9 +63,13 @@ export async function POST(request: NextRequest) {
           let tools: Record<string, any> = {};
 
           try {
+            // Detect transport type from URL
+            const transportType = mcp.address.includes('/sse') ? 'sse' : 'http';
+            console.log(`🔌 Using ${transportType} transport for ${mcp.name}`);
+
             mcpClient = await createMCPClient({
               transport: {
-                type: "http",
+                type: transportType as 'http' | 'sse',
                 url: mcp.address,
                 headers: mcp.credentials
                   ? { Authorization: `Bearer ${mcp.credentials}` }
@@ -76,11 +81,14 @@ export async function POST(request: NextRequest) {
 
             // Get tools from MCP server - AI SDK handles the conversion automatically
             tools = await mcpClient.tools();
+            // Debug: Log tools from AI SDK MCP client
+            console.log(`📥 Tools from AI SDK MCP client (${mcp.name}):`, JSON.stringify(tools, null, 2));
           } catch (initError: any) {
             // If initialization fails, try to fetch tools directly as fallback
             console.warn(
               `⚠️ MCP client initialization failed for ${mcp.name}, trying direct tools/list...`
             );
+            console.error(`❌ Init error details:`, initError.message, initError.stack);
 
             try {
               const toolsListResponse = await fetch(mcp.address, {
@@ -102,12 +110,78 @@ export async function POST(request: NextRequest) {
               if (toolsListResponse.ok) {
                 const toolsListData = await toolsListResponse.json();
                 if (toolsListData.result?.tools) {
+                  // Debug: Log raw MCP response
+                  console.log(`📥 Raw MCP tools from ${mcp.name}:`, JSON.stringify(toolsListData.result.tools, null, 2));
+
                   // Convert MCP tools to AI SDK tool format
-                  for (const tool of toolsListData.result.tools) {
-                    tools[tool.name] = {
-                      description: tool.description || "",
-                      parameters: tool.inputSchema || {},
-                    };
+                  // NOTE: Converting JSON Schema to Zod to work around AI SDK serialization bug
+                  // See: https://github.com/vercel/ai/issues/12019
+                  for (const mcpTool of toolsListData.result.tools) {
+                    // Convert JSON Schema properties to Zod schema
+                    const zodShape: Record<string, any> = {};
+                    const properties = mcpTool.inputSchema?.properties || {};
+                    const required = mcpTool.inputSchema?.required || [];
+
+                    for (const [key, prop] of Object.entries(properties)) {
+                      const p = prop as any;
+                      let zodType: any;
+
+                      if (p.type === "string") {
+                        zodType = z.string();
+                      } else if (p.type === "number") {
+                        zodType = z.number();
+                      } else if (p.type === "boolean") {
+                        zodType = z.boolean();
+                      } else {
+                        zodType = z.any();
+                      }
+
+                      if (p.description) {
+                        zodType = zodType.describe(p.description);
+                      }
+
+                      // Make optional if not in required array
+                      if (!required.includes(key)) {
+                        zodType = zodType.optional();
+                      }
+
+                      zodShape[key] = zodType;
+                    }
+
+                    tools[mcpTool.name] = tool({
+                      description: mcpTool.description || "",
+                      parameters: z.object(zodShape),
+                      execute: async (args: any) => {
+                        // Call the MCP server's tools/call endpoint
+                        const callResponse = await fetch(mcp.address, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            ...(mcp.credentials ? { Authorization: `Bearer ${mcp.credentials}` } : {}),
+                          },
+                          body: JSON.stringify({
+                            jsonrpc: "2.0",
+                            id: `tool-call-${Date.now()}`,
+                            method: "tools/call",
+                            params: {
+                              name: mcpTool.name,
+                              arguments: args,
+                            },
+                          }),
+                        });
+
+                        if (!callResponse.ok) {
+                          throw new Error(`MCP tool call failed: ${callResponse.statusText}`);
+                        }
+
+                        const callData = await callResponse.json();
+                        if (callData.error) {
+                          throw new Error(`MCP error: ${callData.error.message}`);
+                        }
+
+                        return callData.result;
+                      },
+                    });
                   }
                   console.log(
                     `✅ Fallback: Discovered ${
@@ -242,12 +316,21 @@ export async function POST(request: NextRequest) {
     } else {
       // OpenAI - create provider and then get model
       modelName = body.model || "gpt-4o-mini";
+      console.log(`🤖 Using OpenAI model: ${modelName}`);
       const openaiProvider = createOpenAI({ apiKey: llmApiKey });
-      model = openaiProvider(modelName);
+      // Use .chat() to force Chat Completions API instead of Responses API
+      // The Responses API has schema conversion bugs with MCP tools
+      model = openaiProvider.chat(modelName);
     }
 
     // Merge MCP tools with any tools from the request body
     const requestTools = body.tools || {};
+
+    // Debug: Log request tools to see if they have invalid schemas
+    if (Object.keys(requestTools).length > 0) {
+      console.log("📥 Request body tools:", JSON.stringify(requestTools, null, 2));
+    }
+
     const allTools =
       Object.keys(allMCPTools).length > 0 ||
       Object.keys(requestTools).length > 0
@@ -262,6 +345,8 @@ export async function POST(request: NextRequest) {
           mcpCount > 0 ? `${mcpCount} from MCP` : ""
         })`
       );
+      // Debug: Log actual tool schemas
+      console.log("📋 Tool schemas being sent:", JSON.stringify(allTools, null, 2));
     }
 
     // Stream response using AI SDK
