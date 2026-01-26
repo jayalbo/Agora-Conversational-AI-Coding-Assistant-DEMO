@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { streamText, stepCountIs, tool, jsonSchema } from "ai";
+import { streamText, stepCountIs } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createMCPClient } from "@ai-sdk/mcp";
@@ -148,12 +148,12 @@ export async function POST(request: NextRequest) {
                       zodShape[key] = zodType;
                     }
 
-                    tools[mcpTool.name] = tool(
-                      {
-                        description: mcpTool.description || "",
-                        parameters: z.object(zodShape),
-                      },
-                      async (args: any) => {
+                    // Create tool object directly (bypass tool() helper to avoid type issues)
+                    const mcpToolName = mcpTool.name;
+                    tools[mcpToolName] = {
+                      description: mcpTool.description || "",
+                      parameters: z.object(zodShape),
+                      execute: async (args: any) => {
                         // Call the MCP server's tools/call endpoint
                         const callResponse = await fetch(mcp.address, {
                           method: "POST",
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
                             id: `tool-call-${Date.now()}`,
                             method: "tools/call",
                             params: {
-                              name: mcpTool.name,
+                              name: mcpToolName,
                               arguments: args,
                             },
                           }),
@@ -182,8 +182,8 @@ export async function POST(request: NextRequest) {
                         }
 
                         return callData.result;
-                      }
-                    );
+                      },
+                    };
                   }
                   console.log(
                     `✅ Fallback: Discovered ${
